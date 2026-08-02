@@ -272,6 +272,7 @@ with tab_analyzer:
         if not uploaded_file:
             st.error("Please select a PDF file first.")
         else:
+            success = False
             with st.spinner("Uploading file and triggering Celery worker queue..."):
                 try:
                     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
@@ -317,11 +318,14 @@ with tab_analyzer:
                         
                         if status == "completed":
                             st.session_state.latest_analysis_id = resume_id
-                            st.rerun()
+                            success = True
                     else:
                         st.error(f"Upload failed: {response.json().get('detail', 'Unknown error')}")
                 except Exception as e:
                     st.error(f"Network Connection Error: {e}")
+
+            if success:
+                st.rerun()
 
     # Display latest report
     st.write("---")

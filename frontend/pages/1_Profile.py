@@ -157,13 +157,17 @@ if submit:
             "backlogs": int(backlogs),
         }
 
+        success = False
         with st.spinner("Saving updated profile parameters..."):
             try:
                 response = api_client.put("/profile/", data=payload)
                 if response.status_code == 200:
-                    st.success("✓ Academic & Placement Profile saved successfully!")
-                    st.rerun()
+                    success = True
                 else:
                     st.error(f"Failed to save profile: {response.json().get('detail', 'Unknown error')}")
             except Exception as e:
                 st.error(f"Error connecting to backend API: {e}")
+
+        if success:
+            st.success("✓ Academic & Placement Profile saved successfully!")
+            st.rerun()
