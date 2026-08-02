@@ -68,19 +68,13 @@ html, body, [class*="css"], .stMarkdown {
 }
 
 /* ── MAIN CONTAINER (centered on the page, content itself stays readable) ── */
-[data-testid="stAppViewContainer"] > section > div.block-container {
+.block-container {
   max-width: 1200px !important;
   margin: 0 auto !important;
   padding-left: 2rem !important;
   padding-right: 2rem !important;
   padding-top: 32px !important;
   padding-bottom: 64px !important;
-}
-
-/* Center the whole app horizontally when the viewport is wider than max-width */
-[data-testid="stAppViewContainer"] > section {
-  display: flex !important;
-  justify-content: center !important;
 }
 
 /* ── MODERN SCROLLBAR ── */
