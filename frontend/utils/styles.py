@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 def inject_custom_css():
     """Ultra-Professional Minimalist Design System — Vercel / Shadcn Aesthetic."""
     st.markdown("""<style>
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 /* ── KEYFRAME ANIMATIONS ── */
 @keyframes fadeInUp {
@@ -47,7 +47,7 @@ def inject_custom_css():
 
 /* ── GLOBAL RESET & TYPOGRAPHY ── */
 html, body, [class*="css"], .stMarkdown {
-  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -525,7 +525,7 @@ def apply_plotly_dark_theme(fig: go.Figure, height: int = 300) -> go.Figure:
         height=height,
         paper_bgcolor="#09090B",
         plot_bgcolor="#09090B",
-        font=dict(family="Geist, Inter, sans-serif", color="#A1A1AA", size=12),
+        font=dict(family="Inter, sans-serif", color="#A1A1AA", size=12),
         margin=dict(l=10, r=10, t=20, b=10),
         legend=dict(
             bgcolor="#09090B",
