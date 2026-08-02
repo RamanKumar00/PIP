@@ -1,0 +1,92 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: placementor-db
+    restart: always
+    environment:
+      POSTGRES_DB: placementor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: SecurePostgresPass123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d placementor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: placementor-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: placementor-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://postgres:SecurePostgresPass123@db:5432/placementor
+      - REDIS_URL=redis://redis:6379/0
+      - FIRST_SUPERUSER_EMAIL=admin@placementor.ai
+      - FIRST_SUPERUSER_PASSWORD=AdminSecretPass123!
+      - JWT_SECRET=production_secret_key_change_me_in_prod_137591
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/liveness"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: placementor-worker
+    restart: always
+    command: celery -A app.core.celery_app worker --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://postgres:SecurePostgresPass123@db:5432/placementor
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: placementor-frontend
+    restart: always
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000/api/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

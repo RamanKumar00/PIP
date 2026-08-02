@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Databases
+*.db
+*.db-journal
+*.sqlite3
+*.sqlite3-journal
+
+# VS Code settings
+.vscode/
+
+# User uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Frontend vendor libraries
+frontend/libs/
+
