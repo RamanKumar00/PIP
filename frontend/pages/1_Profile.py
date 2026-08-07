@@ -80,61 +80,62 @@ st.progress(profile_strength_pct / 100)
 st.write("")
 
 # Form to compile details - separated into spacious glass-cards
-with st.container(border=True):
-    st.markdown("### 📇 Contact & Personal Information")
-    col1, col2 = st.columns(2)
-    with col1:
-        full_name = st.text_input("Full Name *", value=initial_data.get("full_name", ""), placeholder="e.g. Alex Chen")
-    with col2:
-        phone = st.text_input("Phone Number *", value=initial_data.get("phone", ""), placeholder="+91 98765 43210")
+with st.form("profile_form", clear_on_submit=False):
+    with st.container(border=True):
+        st.markdown("### 📇 Contact & Personal Information")
+        col1, col2 = st.columns(2)
+        with col1:
+            full_name = st.text_input("Full Name *", value=initial_data.get("full_name", ""), placeholder="e.g. Alex Chen")
+        with col2:
+            phone = st.text_input("Phone Number *", value=initial_data.get("phone", ""), placeholder="+91 98765 43210")
 
-with st.container(border=True):
-    st.markdown("### 🎓 Academic Credentials")
-    col3, col4, col5 = st.columns(3)
-    with col3:
-        college = st.text_input("College *", value=initial_data.get("college", ""), placeholder="e.g. Institute of Technology")
-    with col4:
-        university = st.text_input("University *", value=initial_data.get("university", ""), placeholder="e.g. State University")
-    with col5:
-        branch_options = ["Computer Science & Engineering", "Information Technology", "Electronics & Communication", "Electrical Engineering", "Mechanical Engineering", "Civil Engineering", "Other"]
-        cur_branch = initial_data.get("branch", "Computer Science & Engineering")
-        branch_idx = branch_options.index(cur_branch) if cur_branch in branch_options else 0
-        branch = st.selectbox("Academic Branch *", branch_options, index=branch_idx)
+    with st.container(border=True):
+        st.markdown("### 🎓 Academic Credentials")
+        col3, col4, col5 = st.columns(3)
+        with col3:
+            college = st.text_input("College *", value=initial_data.get("college", ""), placeholder="e.g. Institute of Technology")
+        with col4:
+            university = st.text_input("University *", value=initial_data.get("university", ""), placeholder="e.g. State University")
+        with col5:
+            branch_options = ["Computer Science & Engineering", "Information Technology", "Electronics & Communication", "Electrical Engineering", "Mechanical Engineering", "Civil Engineering", "Other"]
+            cur_branch = initial_data.get("branch", "Computer Science & Engineering")
+            branch_idx = branch_options.index(cur_branch) if cur_branch in branch_options else 0
+            branch = st.selectbox("Academic Branch *", branch_options, index=branch_idx)
 
-    col6, col7, col8 = st.columns(3)
-    with col6:
-        current_year = st.number_input("Current Year of Study *", min_value=1, max_value=5, value=initial_data.get("current_year", 3))
-    with col7:
-        cgpa = st.number_input("Current CGPA (Scale 0-10) *", min_value=0.0, max_value=10.0, value=float(initial_data.get("cgpa", 0.0)), step=0.01)
-    with col8:
-        backlogs = st.number_input("Active Backlogs Count *", min_value=0, value=initial_data.get("backlogs", 0))
+        col6, col7, col8 = st.columns(3)
+        with col6:
+            current_year = st.number_input("Current Year of Study *", min_value=1, max_value=5, value=initial_data.get("current_year", 3))
+        with col7:
+            cgpa = st.number_input("Current CGPA (Scale 0-10) *", min_value=0.0, max_value=10.0, value=float(initial_data.get("cgpa", 0.0)), step=0.01)
+        with col8:
+            backlogs = st.number_input("Active Backlogs Count *", min_value=0, value=initial_data.get("backlogs", 0))
 
-    col9, col10 = st.columns(2)
-    with col9:
-        tenth_pct = st.number_input("10th Grade Percentage *", min_value=0.0, max_value=100.0, value=float(initial_data.get("tenth_percentage", 0.0)), step=0.1)
-    with col10:
-        twelfth_pct = st.number_input("12th Grade Percentage *", min_value=0.0, max_value=100.0, value=float(initial_data.get("twelfth_percentage", 0.0)), step=0.1)
+        col9, col10 = st.columns(2)
+        with col9:
+            tenth_pct = st.number_input("10th Grade Percentage *", min_value=0.0, max_value=100.0, value=float(initial_data.get("tenth_percentage", 0.0)), step=0.1)
+        with col10:
+            twelfth_pct = st.number_input("12th Grade Percentage *", min_value=0.0, max_value=100.0, value=float(initial_data.get("twelfth_percentage", 0.0)), step=0.1)
 
-with st.container(border=True):
-    st.markdown("### 💼 Placement Preferences & Links")
-    col11, col12 = st.columns(2)
-    with col11:
-        linkedin = st.text_input("LinkedIn Profile URL", value=initial_data.get("linkedin_url", ""), placeholder="https://linkedin.in/in/username")
-        portfolio = st.text_input("Portfolio Website URL", value=initial_data.get("portfolio_url", ""), placeholder="https://alexchen.dev")
-    with col12:
-        github = st.text_input("GitHub Profile URL", value=initial_data.get("github_url", ""), placeholder="https://github.com/username")
-        role_options = ["Software Engineer", "Frontend Developer", "Backend Developer", "Full Stack Developer", "Data Analyst", "Data Scientist", "DevOps Engineer", "Product Manager"]
-        cur_role = initial_data.get("preferred_role", "Software Engineer")
-        role_idx = role_options.index(cur_role) if cur_role in role_options else 0
-        pref_role = st.selectbox("Target Placement Role *", role_options, index=role_idx)
+    with st.container(border=True):
+        st.markdown("### 💼 Placement Preferences & Links")
+        col11, col12 = st.columns(2)
+        with col11:
+            linkedin = st.text_input("LinkedIn Profile URL", value=initial_data.get("linkedin_url", ""), placeholder="https://linkedin.in/in/username")
+            portfolio = st.text_input("Portfolio Website URL", value=initial_data.get("portfolio_url", ""), placeholder="https://alexchen.dev")
+        with col12:
+            github = st.text_input("GitHub Profile URL", value=initial_data.get("github_url", ""), placeholder="https://github.com/username")
+            role_options = ["Software Engineer", "Frontend Developer", "Backend Developer", "Full Stack Developer", "Data Analyst", "Data Scientist", "DevOps Engineer", "Product Manager"]
+            cur_role = initial_data.get("preferred_role", "Software Engineer")
+            role_idx = role_options.index(cur_role) if cur_role in role_options else 0
+            pref_role = st.selectbox("Target Placement Role *", role_options, index=role_idx)
 
-    pref_companies_str = st.text_input(
-        "Target Companies (Comma-separated, e.g. Amazon, Google, Microsoft)", 
-        value=", ".join(initial_data.get("preferred_companies", []))
-    )
+        pref_companies_str = st.text_input(
+            "Target Companies (Comma-separated, e.g. Amazon, Google, Microsoft)", 
+            value=", ".join(initial_data.get("preferred_companies", []))
+        )
 
-st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
-submit = st.button("Save Profile Parameters", type="primary", use_container_width=True)
+    st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
+    submit = st.form_submit_button("Save Profile Parameters", type="primary", use_container_width=True)
 
 if submit:
     if not full_name or not college or not university or not phone:
