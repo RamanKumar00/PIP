@@ -27,6 +27,9 @@ celery_app = Celery(
     backend=redis_url,
 )
 
+import os
+is_render = os.getenv("RENDER", "false").lower() == "true"
+
 # Configure Celery configurations
 celery_app.conf.update(
     task_serializer="json",
@@ -34,6 +37,6 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    task_always_eager=False,
+    task_always_eager=is_render or (os.getenv("CELERY_ALWAYS_EAGER", "false").lower() == "true"),
     imports=["app.worker.tasks"],  # Autoload task definitions
 )
