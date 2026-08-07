@@ -34,6 +34,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+if "profile_saved" in st.session_state and st.session_state.profile_saved:
+    st.success("✓ Academic & Placement Profile saved successfully!")
+    del st.session_state.profile_saved
+
 # Fetch current profile if it exists
 profile_exists = False
 initial_data = {}
@@ -173,5 +177,5 @@ if submit:
                 st.error(f"Error connecting to backend API: {e}")
 
         if success:
-            st.success("✓ Academic & Placement Profile saved successfully!")
+            st.session_state.profile_saved = True
             st.rerun()
