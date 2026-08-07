@@ -85,7 +85,13 @@ class AuthService:
             return None
 
         # Verify user still exists and is active
-        user = user_repo.get(db, id=user_id)
+        import uuid
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except (ValueError, TypeError):
+            return None
+
+        user = user_repo.get(db, id=user_uuid)
         if not user or not user.is_active:
             return None
 
