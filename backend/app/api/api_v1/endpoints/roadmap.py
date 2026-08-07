@@ -441,6 +441,26 @@ def get_dashboard_analytics(
     total_roles = len(roles)
     readiness = int((eligible_count / total_roles) * 100) if total_roles > 0 else 0
 
+    # 3. Tasks statistics & initialization
+    tasks = db.query(RoadmapTask).filter(RoadmapTask.user_id == current_user.id).all()
+    if not tasks and roles:
+        first_role = roles[0]
+        default_task = RoadmapTask(
+            user_id=current_user.id,
+            company_role_id=first_role.id,
+            skill_name="General Prep",
+            title="General Campus Placement Preparation",
+            priority=3,
+            estimated_hours=10,
+            difficulty="Beginner",
+            status="In Progress",
+            progress_percentage=10,
+        )
+        db.add(default_task)
+        db.commit()
+        db.refresh(default_task)
+        tasks = [default_task]
+
     # 2. Study Streak & Hours studied
     sessions = (
         db.query(StudySession)
@@ -448,6 +468,33 @@ def get_dashboard_analytics(
         .order_by(StudySession.session_date.asc())
         .all()
     )
+
+    # Automatically register study session for today's login
+    today = datetime.now(timezone.utc).date()
+    today_sessions = [s for s in sessions if s.session_date.date() == today]
+    
+    if not today_sessions and tasks:
+        auto_session = StudySession(
+            user_id=current_user.id,
+            roadmap_task_id=tasks[0].id,
+            duration_minutes=30,
+            focus_score=4,
+            energy_level=4,
+            resource_used="PlaceMentor Learning Portal",
+            notes="Logged daily placement study activity during dashboard sign-in.",
+            session_date=datetime.now(timezone.utc)
+        )
+        db.add(auto_session)
+        tasks[0].progress_percentage = min(tasks[0].progress_percentage + 5, 95)
+        db.commit()
+        
+        # Reload sessions
+        sessions = (
+            db.query(StudySession)
+            .filter(StudySession.user_id == current_user.id)
+            .order_by(StudySession.session_date.asc())
+            .all()
+        )
 
     total_minutes = sum(s.duration_minutes for s in sessions)
     total_hours = round(total_minutes / 60, 1)
@@ -469,8 +516,6 @@ def get_dashboard_analytics(
         else:
             streak = 0
 
-    # 3. Tasks statistics
-    tasks = db.query(RoadmapTask).filter(RoadmapTask.user_id == current_user.id).all()
     tasks_completed = sum(1 for t in tasks if t.status == "Completed")
     tasks_total = len(tasks)
 

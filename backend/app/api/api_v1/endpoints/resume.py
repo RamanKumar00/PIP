@@ -199,3 +199,26 @@ def get_resume_by_id(
             detail="Resume record not found.",
         )
     return resume
+
+
+@router.put("/{resume_id}/activate", response_model=ResumeResponse)
+def activate_resume(
+    resume_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """Make a specific resume version the active one.
+    """
+    resume = db.query(Resume).filter(Resume.id == resume_id, Resume.user_id == current_user.id).first()
+    if not resume:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume record not found.",
+        )
+    # Deactivate all others
+    db.query(Resume).filter(Resume.user_id == current_user.id).update({Resume.is_active: False})
+    # Activate this one
+    resume.is_active = True
+    db.commit()
+    db.refresh(resume)
+    return resume

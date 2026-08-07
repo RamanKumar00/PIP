@@ -14,6 +14,13 @@ st.set_page_config(
 
 inject_custom_css()
 
+# Inject meta viewport tag for mobile browser responsiveness
+st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">', unsafe_allow_html=True)
+
+# ── SESSION INITIALIZATION & QUERY PARAMS SYNC ──
+if "initialized" not in st.session_state:
+    st.session_state.initialized = True
+
 # ── SESSION STATE ──
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
@@ -30,6 +37,8 @@ def handle_logout():
         pass
     for k in ["access_token", "refresh_token", "user_email"]:
         st.session_state[k] = None
+        if k in st.query_params:
+            del st.query_params[k]
     st.rerun()
 
 
@@ -290,15 +299,14 @@ Analyze your resume, discover eligible companies, build personalized learning ro
                         placeholder="Enter your password",
                         key="li_pw",
                     )
-                    st.markdown("""
-                    <div class="auth-utility-row">
-                        <label class="remember-me-label">
-                            <input type="checkbox" id="remember-me">
-                            Remember me
-                        </label>
-                        <a href="#" class="forgot-pw-link">Forgot password?</a>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    
+                    # Columns layout inside form to align Remember Me and Forgot Password side by side
+                    col_rem, col_forgot = st.columns([1.2, 1])
+                    with col_rem:
+                        remember_me = st.checkbox("Remember me", value=True)
+                    with col_forgot:
+                        st.markdown('<div style="text-align: right; padding-top: 6px;"><a href="#" class="forgot-pw-link">Forgot password?</a></div>', unsafe_allow_html=True)
+                        
                     submit = st.form_submit_button("Sign In to Portal", use_container_width=True, type="primary")
 
                     if submit:
@@ -314,6 +322,17 @@ Analyze your resume, discover eligible companies, build personalized learning ro
                                         st.session_state.access_token = data["access_token"]
                                         st.session_state.refresh_token = data["refresh_token"]
                                         st.session_state.user_email = email
+                                        
+                                        # Handle Remember Me persistent storage in query parameters
+                                        if remember_me:
+                                            st.query_params["access_token"] = data["access_token"]
+                                            st.query_params["refresh_token"] = data["refresh_token"]
+                                            st.query_params["user_email"] = email
+                                        else:
+                                            for k in ["access_token", "refresh_token", "user_email"]:
+                                                if k in st.query_params:
+                                                    del st.query_params[k]
+                                                    
                                         st.success("Signed in successfully!")
                                         login_success = True
                                     else:
@@ -474,8 +493,8 @@ Analyze your resume, discover eligible companies, build personalized learning ro
     with col_f3:
         st.markdown("""<div class="glass-card" style="margin-bottom: 20px; min-height: 150px;">
 <div style="font-size:1.8rem;margin-bottom:8px;">🗺️</div>
-<h4 style="margin:0 0 6px;color:#F0F6FC;font-size:0.95rem;font-weight:700;">Learning Roadmaps</h4>
-<p style="color:#94A3B8;font-size:0.8rem;margin:0;line-height:1.5;">Personalized study tasks generated dynamically from recruiter criteria.</p>
+<h4 style="margin:0 0 6px;color:#F0F6FC;font-size:0.95rem;font-weight:700;">Learning Platform</h4>
+<p style="color:#94A3B8;font-size:0.8rem;margin:0;line-height:1.5;">Search any technology, database, or framework to immediately open its tutorial.</p>
 </div>""", unsafe_allow_html=True)
         st.markdown("""<div class="glass-card" style="margin-bottom: 20px; min-height: 150px;">
 <div style="font-size:1.8rem;margin-bottom:8px;">🏢</div>
@@ -509,6 +528,17 @@ Analyze your resume, discover eligible companies, build personalized learning ro
 <div style="margin-left:20px;display:flex;gap:2px;"><span style="color:#F59E0B;font-size:0.9rem;">★★★★★</span></div>
 </div></div></div>
 """, unsafe_allow_html=True)
+
+
+@st.cache_data(ttl=15)
+def get_cached_dashboard_analytics(user_email: str) -> dict:
+    try:
+        res = api_client.get("/roadmap/dashboard-analytics")
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return {}
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -560,12 +590,9 @@ def render_dashboard():
         "recommended_next_action": "Upload your resume and complete your profile to unlock AI placement scoring.",
         "readiness_trend": {"Month 1": 15, "Month 2": 45, "Month 3": 75},
     }
-    try:
-        res = api_client.get("/roadmap/dashboard-analytics")
-        if res.status_code == 200:
-            metrics = res.json()
-    except Exception:
-        pass
+    cached_metrics = get_cached_dashboard_analytics(st.session_state.user_email or "default_user")
+    if cached_metrics:
+        metrics = cached_metrics
 
     # AI Recommendation Banner
     st.markdown(textwrap.dedent(f"""
@@ -665,8 +692,8 @@ def render_dashboard():
          "Upload your PDF resume to extract skills, parse ATS score, and get improvement feedback."),
         ("STEP 2", "badge-purple", "🏢 Company Hub",
          "Browse 50+ recruiter profiles. Missing skills auto-populate your learning roadmap."),
-        ("STEP 3", "badge-eligible", "📚 Learning Roadmap",
-         "Complete tasks, take MCQ quizzes, log study hours, and practice AI mock interviews."),
+        ("STEP 3", "badge-eligible", "📚 Learning Platform",
+         "Search any technology or tool to immediately open its corresponding tutorial page in a new tab."),
     ]
     sc1, sc2, sc3 = st.columns(3)
     for col, (tag, badge, title, desc) in zip([sc1, sc2, sc3], steps):

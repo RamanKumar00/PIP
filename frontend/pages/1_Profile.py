@@ -12,6 +12,9 @@ st.set_page_config(
 # Apply Custom Design System
 inject_custom_css()
 
+# Inject meta viewport tag for mobile browser responsiveness
+st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">', unsafe_allow_html=True)
+
 # Auth guard check
 if "access_token" not in st.session_state or not st.session_state.access_token:
     st.warning("Please log in first from the Command Center Home Page.")

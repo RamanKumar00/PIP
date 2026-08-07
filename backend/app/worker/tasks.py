@@ -55,8 +55,23 @@ def analyze_resume_task(resume_id: str, target_role: str) -> bool:
         with open(file_path, "rb") as f:
             pdf_bytes = f.read()
 
+        # Fetch target role description and requirements from DB if registered
+        from app.models.company import CompanyRole
+        role_record = db.query(CompanyRole).filter(CompanyRole.title.like(f"%{target_role}%")).first()
+        target_requirements = ""
+        if role_record:
+            requirements_segments = []
+            if role_record.description:
+                requirements_segments.append(role_record.description)
+            if role_record.technical_interview_topics:
+                requirements_segments.append("Technical topics: " + ", ".join(role_record.technical_interview_topics))
+            if role_record.skill_weights:
+                skills_list = [sw.skill_name for sw in role_record.skill_weights]
+                requirements_segments.append("Core skills: " + ", ".join(skills_list))
+            target_requirements = "\n".join(requirements_segments)
+
         # Execute modular AI Pipeline
-        report = generate_resume_report(pdf_bytes, target_role)
+        report = generate_resume_report(pdf_bytes, target_role, target_requirements)
 
         if report.get("status") == "failed":
             analysis.status = "failed"
@@ -86,12 +101,37 @@ def analyze_resume_task(resume_id: str, target_role: str) -> bool:
             analysis.detected_skills = report["detected_skills"]
             analysis.parsed_text = report["parsed_text"]
 
+            # Save the new independent JSON columns
+            analysis.recruiter_report = report.get("recruiter_report") or {}
+            analysis.semantic_analysis = report.get("semantic_analysis") or {}
+            analysis.interview_preparation = report.get("interview_preparation") or {}
+
+            # Enrich benchmark comparison in analytics data using user profile
+            analytics_data = report.get("analytics_data") or {}
+            profile = resume.user.profile
+            if profile and role_record and role_record.eligibility_rule:
+                rule = role_record.eligibility_rule
+                cgpa_ok = (profile.cgpa or 0.0) >= rule.min_cgpa
+                branch_ok = (profile.branch or "") in (rule.allowed_branches or [])
+                backlogs_ok = (profile.backlogs or 0) <= rule.max_active_backlogs
+                
+                analytics_data["benchmark_comparison"] = {
+                    "gpa_met": cgpa_ok,
+                    "allowed_branch": branch_ok,
+                    "backlogs_checked": backlogs_ok,
+                    "target_gpa": rule.min_cgpa,
+                    "student_gpa": float(profile.cgpa) if profile.cgpa is not None else 0.0,
+                    "target_branches": rule.allowed_branches,
+                    "student_branch": profile.branch
+                }
+            
+            analysis.analytics_data = analytics_data
+
             # Set error message to None
             analysis.error_message = None
 
             # Also update user's profile with detected resume URL and merge skills if profile exists
             # (We will keep this flexible so that the profile stays synchronized)
-            profile = resume.user.profile
             if profile:
                 profile.resume_url = f"/uploads/{resume.user_id}/{resume.stored_filename}"
 

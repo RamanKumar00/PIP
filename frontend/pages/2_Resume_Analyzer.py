@@ -6,21 +6,64 @@ import plotly.express as px
 import plotly.graph_objects as go
 from utils.api_client import api_client
 from utils.styles import inject_custom_css, apply_plotly_dark_theme
+from utils.components import (
+    draw_score_card,
+    draw_radar_chart,
+    draw_simplified_bar_chart,
+    draw_recruiter_card,
+    draw_interview_panel,
+    draw_benchmark_chart,
+    draw_heatmap
+)
 
-# Page Configuration
+# Page configuration
 st.set_page_config(
-    page_title="AI Resume Analyzer - PlaceMentor AI",
-    page_icon="📄",
+    page_title="AI Resume Intelligence - PlaceMentor AI",
+    page_icon="🔍",
     layout="wide",
 )
 
 # Apply Custom Design System
 inject_custom_css()
 
+# Inject meta viewport tag for mobile browser responsiveness
+st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">', unsafe_allow_html=True)
+
 # Auth guard check
 if "access_token" not in st.session_state or not st.session_state.access_token:
     st.warning("Please log in first from the Command Center Home Page.")
     st.stop()
+
+# Caching fetchers with short TTLs and isolated user sessions (user email hash keys)
+@st.cache_data(ttl=60)
+def get_cached_profile(user_email: str) -> dict:
+    try:
+        p_response = api_client.get("/profile/")
+        if p_response.status_code == 200:
+            return p_response.json()
+    except Exception:
+        pass
+    return {}
+
+@st.cache_data(ttl=30)
+def get_cached_latest_resume(user_email: str) -> dict:
+    try:
+        latest_response = api_client.get("/resume/latest")
+        if latest_response.status_code == 200:
+            return latest_response.json()
+    except Exception:
+        pass
+    return {}
+
+@st.cache_data(ttl=60)
+def get_cached_resume_history(user_email: str) -> list:
+    try:
+        history_response = api_client.get("/resume/history")
+        if history_response.status_code == 200:
+            return history_response.json()
+    except Exception:
+        pass
+    return []
 
 # Header Bar
 st.markdown(
@@ -28,22 +71,17 @@ st.markdown(
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
         <div>
             <span style="font-size:0.75rem; color:#64748B; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;">PORTAL / RESUME INTELLIGENCE</span>
-            <h2 style="margin:0; font-size:1.6rem; font-weight:800; color:#F8FAFC;" class="neon-text-indigo">AI Resume Intelligence Engine</h2>
+            <h2 style="margin:0; font-size:1.6rem; font-weight:800; color:#F8FAFC;" class="neon-text-indigo">AI Resume Intelligence Platform</h2>
         </div>
-        <span class="badge badge-indigo">PyMuPDF & spaCy Core</span>
+        <span class="badge badge-indigo">Modular Sub-Analyzers & TF-IDF Semantic matching</span>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 # Fetch current target role from profile to prepopulate
-target_role_default = "Software Engineer"
-try:
-    p_response = api_client.get("/profile/")
-    if p_response.status_code == 200:
-        target_role_default = p_response.json().get("preferred_role", "Software Engineer")
-except Exception:
-    pass
+profile_data = get_cached_profile(st.session_state.user_email or "default_user")
+target_role_default = profile_data.get("preferred_role", "Software Engineer")
 
 # Main Tabs
 tab_analyzer, tab_jd_matcher, tab_history = st.tabs([
@@ -51,29 +89,34 @@ tab_analyzer, tab_jd_matcher, tab_history = st.tabs([
 ])
 
 
-def draw_gauge_chart(score: int, title: str, color: str):
-    """Draw circular gauge chart for sub-scores using Plotly.
+def local_tfidf_similarity(doc1: str, doc2: str) -> int:
+    """Computes basic TF-IDF similarity locally for frontend JD matching.
     """
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=score,
-        domain={'x': [0, 1], 'y': [0, 1]},
-        title={'text': title, 'font': {'size': 13, 'color': '#E2E8F0', 'bold': True}},
-        gauge={
-            'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#475569"},
-            'bar': {'color': color},
-            'bgcolor': "rgba(15, 23, 42, 0.6)",
-            'borderwidth': 1,
-            'bordercolor': "rgba(255, 255, 255, 0.08)",
-        }
-    ))
-    apply_plotly_dark_theme(fig, height=145)
-    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10))
-    return fig
+    # Simple tokenization
+    def get_tokens(text):
+        return re.findall(r"\b[a-z]{2,}\b", text.lower())
+        
+    t1, t2 = get_tokens(doc1), get_tokens(doc2)
+    vocab = set(t1 + t2)
+    if not vocab:
+        return 0
+        
+    # Count vectors
+    vec1 = {w: t1.count(w) for w in vocab}
+    vec2 = {w: t2.count(w) for w in vocab}
+    
+    # Dot product
+    dot = sum(vec1[w] * vec2[w] for w in vocab)
+    mag1 = math.sqrt(sum(v**2 for v in vec1.values()))
+    mag2 = math.sqrt(sum(v**2 for v in vec2.values()))
+    
+    if mag1 == 0 or mag2 == 0:
+        return 0
+    return int((dot / (mag1 * mag2)) * 100)
 
 
 def render_analysis_report(resume_data: dict):
-    """Render the full dashboard analysis report.
+    """Render the full redesigned dashboard analysis report.
     """
     analysis = resume_data.get("analysis")
     if not analysis:
@@ -81,179 +124,170 @@ def render_analysis_report(resume_data: dict):
         return
 
     ats_score = analysis.get("ats_score", 0)
-    breakdown = analysis.get("detailed_breakdown", {})
-    strength = breakdown.get("strength_meter", {})
-    suggestions = analysis.get("suggestions", [])
-    proj_analyses = breakdown.get("project_analyses", [])
-    skills = analysis.get("detected_skills", {})
-    role_match = analysis.get("role_match", {})
-
-    # 1. Top Section - ATS Score & Strength Meter
-    col1, col2 = st.columns([1, 1.8])
+    breakdown = analysis.get("detailed_breakdown") or {}
+    strength = analysis.get("strength_meter") or {}
+    suggestions = analysis.get("suggestions") or []
+    proj_analyses = analysis.get("project_analyses") or []
+    skills = analysis.get("detected_skills") or {}
+    role_match = analysis.get("role_match") or {}
     
-    with col1:
-        overall_fig = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=ats_score,
-            title={'text': "OVERALL ATS SCORE", 'font': {'size': 15, 'color': '#818CF8', 'bold': True}},
-            gauge={
-                'axis': {'range': [None, 100]},
-                'bar': {'color': '#6366F1'},
-                'bgcolor': "rgba(15, 23, 42, 0.6)",
-                'steps': [
-                    {'range': [0, 50], 'color': 'rgba(244, 63, 94, 0.12)'},
-                    {'range': [50, 75], 'color': 'rgba(245, 158, 11, 0.12)'},
-                    {'range': [75, 100], 'color': 'rgba(16, 185, 129, 0.12)'}
-                ],
-            }
-        ))
-        apply_plotly_dark_theme(overall_fig, height=220)
-        st.plotly_chart(overall_fig, use_container_width=True)
+    # Redesigned Fields
+    recruiter_report = analysis.get("recruiter_report") or {}
+    semantic_analysis = analysis.get("semantic_analysis") or {}
+    interview_preparation = analysis.get("interview_preparation") or {}
+    analytics_data = analysis.get("analytics_data") or {}
+    explanations = analytics_data.get("explanations") or {}
 
-    with col2:
-        quality_lbl = strength.get("quality_label", "Good")
-        stars = strength.get("stars", 4)
-        stars_str = "★" * stars + "☆" * (5 - stars)
+    # Define inner sub-tabs for structured presentation
+    sub_dashboard, sub_competencies, sub_coach, sub_prep = st.tabs([
+        "📊 Score Dashboard", "🧬 Competency Analytics", "💡 AI Suggestion Coach", "⚔️ Recruiter Sim & Prep"
+    ])
+
+    # 1. SUB-TAB: Dashboard Overview
+    with sub_dashboard:
+        col_gauge, col_rec_decision = st.columns([1, 1.8])
         
-        st.markdown(
-            f"""
-            <div class="glass-card" style="height: 100%; border-left:4px solid #6366F1;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h3 style="margin-top:0; color:#F8FAFC;">Quality Assessment: <span class="neon-text-indigo">{quality_lbl}</span></h3>
-                    <span class="badge badge-indigo">{quality_lbl.upper()} LEVEL</span>
-                </div>
-                <div style="font-size: 1.5rem; color: #F59E0B; margin: 6px 0 12px 0;">{stars_str}</div>
-                <div style="color: #94A3B8; font-size: 0.9rem; line-height: 1.6;">
-                    {analysis.get("overall_feedback", "")}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with col_gauge:
+            overall_fig = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=ats_score,
+                title={'text': "OVERALL ATS SCORE", 'font': {'size': 14, 'color': '#818CF8', 'weight': 'bold'}},
+                gauge={
+                    'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#475569"},
+                    'bar': {'color': '#6366F1'},
+                    'bgcolor': "rgba(15, 23, 42, 0.6)",
+                    'steps': [
+                        {'range': [0, 50], 'color': 'rgba(244, 63, 94, 0.1)'},
+                        {'range': [50, 75], 'color': 'rgba(245, 158, 11, 0.1)'},
+                        {'range': [75, 100], 'color': 'rgba(16, 185, 129, 0.1)'}
+                    ],
+                }
+            ))
+            apply_plotly_dark_theme(overall_fig, height=220)
+            overall_fig.update_layout(margin=dict(l=30, r=30, t=50, b=15))
+            st.plotly_chart(overall_fig, use_container_width=True, config={'responsive': True})
 
-    # 2. Categorized Sub-Scores Row
-    st.write("")
-    st.markdown("### Score Breakdown Categories")
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    
-    categories = [
-        ("Formatting", int((breakdown.get("formatting_score", 0) / 20) * 100), '#818CF8'),
-        ("Grammar", int((breakdown.get("grammar_score", 0) / 20) * 100), '#34D399'),
-        ("Keywords", int((breakdown.get("keyword_score", 0) / 20) * 100), '#FBBF24'),
-        ("Projects", int((breakdown.get("project_score", 0) / 20) * 100), '#EC4899'),
-        ("Experience", int((breakdown.get("experience_score", 0) / 10) * 100), '#10B981'),
-        ("Achievements", int((breakdown.get("achievements_score", 0) / 10) * 100), '#6366F1'),
-    ]
+        with col_rec_decision:
+            draw_recruiter_card(recruiter_report)
 
-    for col, (title, score, color) in zip([c1, c2, c3, c4, c5, c6], categories):
-        with col:
-            st.plotly_chart(draw_gauge_chart(score, title, color), use_container_width=True)
-
-    st.write("---")
-
-    # 3. Role Matching & Extracted Skills
-    col_left, col_right = st.columns([1, 1])
-    
-    with col_left:
-        st.markdown("### Target Role Alignment")
-        role_name = role_match.get("role_name", "Software Engineer")
-        match_pct = role_match.get("match_percentage", 0)
-        
-        st.markdown(
-            f"""
-            <div class="glass-card" style="border-left:4px solid #10B981;">
-                <span style="font-size:0.75rem; color:#94A3B8; font-weight:700;">TARGET ROLE MATCH</span>
-                <h3 style="margin:4px 0; color:#F8FAFC;">{role_name}</h3>
-                <h1 style="margin:6px 0; color:#10B981; font-weight:800;">{match_pct}%</h1>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        
-        st.write("**Matched Core Skills:**")
-        matched_skills = role_match.get("matched_skills", [])
-        if matched_skills:
-            st.markdown(" ".join([f"<span class='badge badge-eligible' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in matched_skills]), unsafe_allow_html=True)
-        else:
-            st.write("None matched yet.")
-            
         st.write("")
-        st.write("**Missing Core Skills (Add to boost match rate):**")
-        missing_skills_list = role_match.get("missing_skills", [])
-        if missing_skills_list:
-            st.markdown(" ".join([f"<span class='badge badge-ineligible' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in missing_skills_list]), unsafe_allow_html=True)
-        else:
-            st.success("Perfect alignment! No missing core skills for this role.")
+        st.markdown("### Sub-Score Category Breakdown")
+        
+        # Horizontal Bar Chart for Sub-Scores
+        score_labels = [
+            "Formatting", "Grammar", "Keywords", "Projects", 
+            "Experience", "Achievements", "Contact Info"
+        ]
+        score_values = [
+            breakdown.get("formatting_score", 0),
+            breakdown.get("grammar_score", 0),
+            breakdown.get("keyword_score", 0),
+            breakdown.get("project_score", 0),
+            breakdown.get("experience_score", 0),
+            breakdown.get("achievements_score", 0),
+            breakdown.get("contact_score", 0)
+        ]
+        # Normalize relative weights to percentage representation
+        max_bounds = [20, 20, 20, 20, 10, 10, 10]
+        percentages = [int((val / limit) * 100) for val, limit in zip(score_values, max_bounds)]
 
-    with col_right:
-        st.markdown("### Extracted Skills Matrix")
-        with st.expander("💻 Programming Languages", expanded=True):
-            st.markdown(" ".join([f"<span class='badge badge-indigo' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in skills.get("programming", [])]), unsafe_allow_html=True)
-        with st.expander("⚙️ Backend Frameworks"):
-            st.markdown(" ".join([f"<span class='badge badge-indigo' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in skills.get("backend", [])]), unsafe_allow_html=True)
-        with st.expander("🎨 Frontend Technologies"):
-            st.markdown(" ".join([f"<span class='badge badge-indigo' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in skills.get("frontend", [])]), unsafe_allow_html=True)
-        with st.expander("🗄️ Databases"):
-            st.markdown(" ".join([f"<span class='badge badge-indigo' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in skills.get("database", [])]), unsafe_allow_html=True)
-        with st.expander("🛠️ Development Tools"):
-            st.markdown(" ".join([f"<span class='badge badge-indigo' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in skills.get("tools", [])]), unsafe_allow_html=True)
-        with st.expander("☁️ Cloud Providers"):
-            st.markdown(" ".join([f"<span class='badge badge-indigo' style='margin-right:4px; margin-bottom:6px;'>{s}</span>" for s in skills.get("cloud", [])]), unsafe_allow_html=True)
+        fig_breakdown = go.Figure(go.Bar(
+            x=percentages,
+            y=score_labels,
+            orientation='h',
+            marker=dict(
+                color=['#818CF8', '#34D399', '#FBBF24', '#EC4899', '#10B981', '#6366F1', '#A855F7'],
+                line=dict(color='rgba(255,255,255,0.1)', width=1)
+            )
+        ))
+        fig_breakdown.update_layout(
+            xaxis=dict(range=[0, 100], gridcolor='rgba(255,255,255,0.05)'),
+            yaxis=dict(autorange="reversed"),
+            margin=dict(l=100, r=20, t=10, b=10)
+        )
+        apply_plotly_dark_theme(fig_breakdown, height=220)
+        st.plotly_chart(fig_breakdown, use_container_width=True, config={'responsive': True})
 
-    st.write("---")
+    # 2. SUB-TAB: Competency Analytics
+    with sub_competencies:
+        col_radar, col_bench = st.columns([1, 1.3])
+        
+        with col_radar:
+            st.markdown("#### Tech Capability Distribution")
+            
+            # Desktop-only radar chart
+            st.markdown('<div class="desktop-only-radar">', unsafe_allow_html=True)
+            draw_radar_chart(skills)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Mobile-only simplified bar chart
+            st.markdown('<div class="mobile-only-bar">', unsafe_allow_html=True)
+            draw_simplified_bar_chart(skills)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    # 4. Project Quality Reviews
-    st.markdown("### Project Description Reviews")
-    if proj_analyses:
-        for proj in proj_analyses:
-            with st.container():
-                st.markdown(
-                    f"""
-                    <div class="glass-card">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <h4 style="margin:0; color:#F8FAFC;">{proj.get("title", "Project Review")}</h4>
-                            <span class="badge badge-eligible">Quality Score: {proj.get("score", 0)}/100</span>
-                        </div>
-                        <ul style="color:#94A3B8; margin-top:10px; line-height:1.6;">
-                            {''.join([f"<li>{s}</li>" for s in proj.get("suggestions", [])])}
-                        </ul>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-    else:
-        st.info("No projects detected. Include a 'Projects' section header to analyze project descriptions.")
+        with col_bench:
+            draw_benchmark_chart(analytics_data)
+            
+            # Semantic Similarity indicators
+            st.write("")
+            sem_pct = semantic_analysis.get("match_percentage", 0)
+            st.markdown(
+                f"""
+                <div class="glass-card" style="border-left: 4px solid #EC4899;">
+                    <span style="font-size:0.75rem; color:#94A3B8; font-weight:700;">SEMANTIC COMPATIBILITY RATE</span>
+                    <h3 style="margin:4px 0; color:#F8FAFC;">{role_match.get("role_name")}</h3>
+                    <h2 style="margin:6px 0; color:#EC4899; font-weight:800;">{sem_pct}% Similarity</h2>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-    st.write("---")
+    # 3. SUB-TAB: AI Coach (Formatting & Rewrite suggestions)
+    with sub_coach:
+        col_formats, col_heat = st.columns([1, 1])
+        
+        with col_formats:
+            st.markdown("#### Structural Formatting Compliance")
+            
+            # Sub-analyzers explanations
+            for key, val in explanations.items():
+                st.markdown(f"**{key.capitalize()} Check:** {val}")
+                
+        with col_heat:
+            draw_heatmap(resume_data.get("sections") or {})
 
-    # 5. Grammar & AI Metrics Suggestions
-    st.markdown("### AI Action-Verb & Metric Recommendations")
-    if suggestions:
-        for idx, sug in enumerate(suggestions):
-            with st.container():
+        st.write("---")
+        st.markdown("#### Action-Oriented Resume Rewrite suggestions")
+        
+        if suggestions:
+            for idx, sug in enumerate(suggestions):
                 cat = sug.get("category", "grammar").upper()
                 badge_style = "badge-ineligible" if cat in ["GRAMMAR", "SPELLING"] else "badge-warning"
                 
                 st.markdown(
                     f"""
-                    <div class="glass-card">
+                    <div class="glass-card" style="margin-bottom: 12px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <span class="badge {badge_style}">{cat}</span>
-                            <span style="color:#94A3B8; font-size:0.8rem;">Target Section: {sug.get("target", "Global")}</span>
+                            <span style="color:#94A3B8; font-size:0.8rem;">Target Area: {sug.get("target", "Global")}</span>
                         </div>
                         <div style="display:flex; flex-direction:column; gap:8px;">
-                            <div style="color: #FB7185; font-size:0.9rem;"><b>✖ Current:</b> <i>"{sug.get("current", "")}"</i></div>
-                            <div style="color: #34D399; font-size:0.9rem;"><b>✔ Suggested:</b> <b>"{sug.get("suggested", "")}"</b></div>
-                            <div style="color: #94A3B8; font-size:0.8rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:6px; margin-top:4px;">
-                                💡 <b>Rationale:</b> {sug.get("rationale", "")}
+                            <div style="color: #FB7185; font-size:0.88rem;"><b>✖ Current Bullet:</b> <i>"{sug.get("current", "")}"</i></div>
+                            <div style="color: #34D399; font-size:0.88rem;"><b>✔ AI Recommended Rewrite:</b> <b>"{sug.get("suggested", "")}"</b></div>
+                            <div style="color: #64748B; font-size:0.8rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:6px; margin-top:4px;">
+                                💡 <b>Recruiter Rationale:</b> {sug.get("rationale", "")}
                             </div>
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-    else:
-        st.success("Clean Result! No grammar errors or suggestions found.")
+        else:
+            st.success("✓ Excellent content! No spelling mistakes or weak project descriptions detected.")
+
+    # 4. SUB-TAB: Recruiter Simulation & Interview Preparation
+    with sub_prep:
+        draw_interview_panel(interview_preparation)
 
 
 # TAB 1. Analyzer Dashboard Tab
@@ -287,7 +321,8 @@ with tab_analyzer:
                         progress_bar = st.progress(0)
                         
                         status = "pending"
-                        for i in range(1, 21):
+                        max_checks = 120  # 120 checks * 0.5s = 60s total timeout
+                        for i in range(1, max_checks + 1):
                             status_response = api_client.get(f"/resume/{resume_id}/status")
                             if status_response.status_code == 200:
                                 status_data = status_response.json()
@@ -298,11 +333,13 @@ with tab_analyzer:
                                     progress_bar.progress(15)
                                 elif status == "processing":
                                     status_box.info("⚙️ AI Pipeline processing: Extracting PDF text and parsing skills...")
-                                    progress_bar.progress(40 + i * 2)
+                                    progress_bar.progress(min(40 + i * 2, 95))
                                 elif status == "completed":
                                     status_box.success("🎉 Analysis complete! Rendering report...")
                                     progress_bar.progress(100)
-                                    time.sleep(0.5)
+                                    # Invalidate cached assets
+                                    get_cached_latest_resume.clear()
+                                    get_cached_resume_history.clear()
                                     status_box.empty()
                                     progress_bar.empty()
                                     break
@@ -314,7 +351,7 @@ with tab_analyzer:
                                 status_box.error("Error fetching parser status from API server.")
                                 break
                             
-                            time.sleep(1.5)
+                            time.sleep(0.5)
                         
                         if status == "completed":
                             st.session_state.latest_analysis_id = resume_id
@@ -329,20 +366,15 @@ with tab_analyzer:
 
     # Display latest report
     st.write("---")
-    st.subheader("Latest Analysis Report")
     
     try:
-        latest_response = api_client.get("/resume/latest")
-        if latest_response.status_code == 200:
-            latest_resume = latest_response.json()
-            if latest_resume.get("analysis") and latest_resume["analysis"]["status"] == "completed":
-                st.info(f"Showing report for: **{latest_resume['original_filename']}** (Uploaded: {latest_resume['created_at'][:10]})")
-                render_analysis_report(latest_resume)
-            else:
-                st.warning("Latest resume upload is processing or failed.")
+        latest_resume = get_cached_latest_resume(st.session_state.user_email or "default_user")
+        if latest_resume and latest_resume.get("analysis") and latest_resume["analysis"]["status"] == "completed":
+            st.info(f"Showing report for: **{latest_resume['original_filename']}** (Uploaded: {latest_resume['created_at'][:10]})")
+            render_analysis_report(latest_resume)
         else:
             st.info("No analyses loaded yet. Upload a resume PDF to trigger the AI Intelligence pipeline.")
-    except Exception:
+    except Exception as e:
         st.info("No analyses loaded yet. Complete your profile and upload a resume to begin.")
 
 
@@ -359,9 +391,9 @@ with tab_jd_matcher:
         else:
             with st.spinner("Matching skills against JD text..."):
                 try:
-                    latest_response = api_client.get("/resume/latest")
-                    if latest_response.status_code == 200:
-                        latest_resume = latest_response.json()
+                    import math # required for local tfidf math
+                    latest_resume = get_cached_latest_resume(st.session_state.user_email or "default_user")
+                    if latest_resume:
                         analysis = latest_resume.get("analysis")
                         
                         if not analysis:
@@ -388,38 +420,41 @@ with tab_jd_matcher:
                                     display_name = vocab.capitalize() if vocab not in ["fastapi", "next.js", "node.js", "ci/cd"] else vocab
                                     required_jd_skills.append(display_name)
                                     
-                            required_jd_skills = list(set(required_jd_skills))
+                                    required_jd_skills = list(set(required_jd_skills))
                             if not required_jd_skills:
                                 required_jd_skills = ["SQL", "Git", "REST APIs"]
                                 
                             matched = [s for s in required_jd_skills if s.lower() in flat_skills]
                             missing = [s for s in required_jd_skills if s.lower() not in flat_skills]
-                                    
-                            match_rate = int((len(matched) / len(required_jd_skills)) * 100) if required_jd_skills else 100
+                            
+                            # Computes local TF-IDF cosine similarity between resume text and pasted JD text
+                            similarity_rate = local_tfidf_similarity(latest_resume.get("parsed_text") or "", jd_text)
                             
                             st.markdown(
                                 f"""
                                 <div class="glass-card" style="border-left:4px solid #10B981;">
-                                    <h4 style="margin:0; color:#E2E8F0;">Custom Job Description Match Score</h4>
-                                    <h2 style="margin: 10px 0; color: #10B981; font-weight:800;">{match_rate}%</h2>
+                                    <h4 style="margin:0; color:#E2E8F0;">Custom Job Description Semantic Match Score</h4>
+                                    <h2 style="margin: 10px 0; color: #10B981; font-weight:800;">{similarity_rate}% Similarity</h2>
                                 </div>
                                 """,
                                 unsafe_allow_html=True,
                             )
                             
-                            col_jd1, col_jd2 = st.columns(2)
-                            with col_jd1:
-                                st.write("**Matched Skills:**")
-                                if matched:
-                                    st.markdown(" ".join([f"<span class='badge badge-eligible'>{s}</span>" for s in matched]), unsafe_allow_html=True)
-                                else:
-                                    st.write("No matching skills found in this JD.")
-                            with col_jd2:
-                                st.write("**Missing Skills:**")
-                                if missing:
-                                    st.markdown(" ".join([f"<span class='badge badge-ineligible'>{s}</span>" for s in missing]), unsafe_allow_html=True)
-                                else:
-                                    st.success("Perfect Match! You have all skills mentioned in the job description.")
+                            st.markdown(
+                                f"""
+                                <div class="responsive-grid" style="margin-top: 15px;">
+                                    <div>
+                                        <b style="color: #FAFAFA;">Matched Technical Skills:</b><br><br>
+                                        {" ".join([f"<span class='badge badge-eligible' style='margin-bottom:6px;'>{s}</span>" for s in matched]) if matched else "<span style='color: #71717A;'>No matching skills found in this JD.</span>"}
+                                    </div>
+                                    <div>
+                                        <b style="color: #FAFAFA;">Missing Technical Skills:</b><br><br>
+                                        {" ".join([f"<span class='badge badge-ineligible' style='margin-bottom:6px;'>{s}</span>" for s in missing]) if missing else "<span class='badge badge-eligible'>✓ Perfect Match! You have all skills mentioned in the job description.</span>"}
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
                     else:
                         st.error("No resumes uploaded. Please upload a resume first.")
                 except Exception as e:
@@ -428,17 +463,14 @@ with tab_jd_matcher:
 
 # TAB 3. Version History Tab
 with tab_history:
-    st.subheader("Upload History & Progression Tracking")
-    st.write("Track how your ATS and Role Match scores improve across successive uploads.")
+    st.subheader("Upload History & Version Restoration Tracker")
+    st.write("Track how your ATS and Role Match scores improve across successive uploads. Select any past upload to activate and restore it.")
 
     try:
-        history_response = api_client.get("/resume/history")
-        if history_response.status_code == 200:
-            history_list = history_response.json()
-            
-            if not history_list:
-                st.info("No upload logs found. Upload your first resume to start tracking versions.")
-            else:
+        history_list = get_cached_resume_history(st.session_state.user_email or "default_user")
+        if not history_list:
+            st.info("No upload logs found. Upload your first resume to start tracking versions.")
+        else:
                 chart_data = []
                 for res_item in reversed(history_list):
                     analysis = res_item.get("analysis")
@@ -460,22 +492,25 @@ with tab_history:
                         title="Placement Readiness Progression",
                         color_discrete_sequence=['#6366F1', '#10B981']
                     )
-                    apply_plotly_dark_theme(fig_history, height=320)
-                    st.plotly_chart(fig_history, use_container_width=True)
+                    apply_plotly_dark_theme(fig_history, height=280)
+                    st.plotly_chart(fig_history, use_container_width=True, config={'responsive': True})
                 
                 st.write("")
-                st.write("**Upload History Log:**")
+                st.write("**Restoration Control Log:**")
                 for r in history_list:
                     analysis = r.get("analysis")
                     score_text = f"ATS Score: {analysis['ats_score']}%" if analysis and analysis["status"] == "completed" else "Pending/Failed"
+                    active_badge = '<span class="badge badge-eligible">ACTIVE VERSION</span>' if r["is_active"] else ""
+                    
                     st.markdown(
                         f"""
                         <div class="glass-card" style="padding: 12px 20px; margin-bottom: 8px;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                                 <div>
                                     <span class="badge badge-indigo" style="margin-right:10px;">Version {r['version']}</span>
                                     <b>{r['original_filename']}</b>
                                     <span style="color:#94A3B8; font-size:0.8rem; margin-left:15px;">({r['created_at'][:10]})</span>
+                                    {active_badge}
                                 </div>
                                 <span style="font-weight:700; color:#818CF8;">{score_text}</span>
                             </div>
@@ -483,7 +518,14 @@ with tab_history:
                         """,
                         unsafe_allow_html=True,
                     )
-        else:
-            st.error("Error retrieving upload history logs.")
+                    # Activate option for inactive ones
+                    if not r["is_active"] and analysis and analysis["status"] == "completed":
+                        if st.button(f"Activate Version {r['version']}", key=f"act_btn_{r['id']}"):
+                            act_res = api_client.put(f"/resume/{r['id']}/activate")
+                            if act_res.status_code == 200:
+                                st.success(f"Restored Version {r['version']} as the active resume.")
+                                st.rerun()
+                            else:
+                                st.error("Failed to restore version.")
     except Exception:
         st.info("No upload history loaded. Upload a resume to start tracking versions.")

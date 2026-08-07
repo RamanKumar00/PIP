@@ -4,7 +4,15 @@ import plotly.graph_objects as go
 
 def inject_custom_css():
     """Ultra-Professional Minimalist Design System — Vercel / Shadcn Aesthetic."""
-    st.markdown("""<style>
+    import os
+    css_dir = os.path.dirname(__file__)
+    responsive_path = os.path.join(css_dir, "responsive.css")
+    responsive_css = ""
+    if os.path.exists(responsive_path):
+        with open(responsive_path, "r", encoding="utf-8") as f:
+            responsive_css = f.read()
+
+    main_css = """<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 /* ── KEYFRAME ANIMATIONS ── */
@@ -46,7 +54,7 @@ def inject_custom_css():
 }
 
 /* ── GLOBAL RESET & TYPOGRAPHY ── */
-html, body, [class*="css"], .stMarkdown {
+html, body, .stApp, .stMarkdown {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
@@ -353,7 +361,6 @@ div[data-baseweb="input"] input {
   background: transparent !important;
   color: var(--text-main) !important;
   font-size: 0.875rem !important;
-  padding: 8px 12px !important;
 }
 div[data-baseweb="input"]:focus-within {
   border-color: var(--text-main) !important;
@@ -373,7 +380,6 @@ div[data-baseweb="textarea"] textarea {
   background: transparent !important;
   color: var(--text-main) !important;
   font-size: 0.875rem !important;
-  padding: 8px 12px !important;
 }
 div[data-baseweb="textarea"]:focus-within {
   border-color: var(--text-main) !important;
@@ -454,10 +460,30 @@ div[data-testid="stForm"] {
 
 /* ── CONTAINER BORDERS (st.container border=True) ── */
 div[data-testid="stVerticalBlockBorderWrapper"] {
-  background: var(--card-bg) !important;
-  border: 1px solid var(--card-border) !important;
-  border-radius: var(--radius-lg) !important;
-  margin-bottom: 16px !important;
+    background: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 16px !important;
+
+    padding: 24px !important;
+    box-sizing: border-box !important;
+
+    margin-bottom: 16px !important;
+}
+
+/* Strip borders and backgrounds from direct column block wrappers */
+div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlockBorderWrapper"],
+div[data-testid="stColumns"] div[data-testid="stVerticalBlockBorderWrapper"],
+div[data-testid="column"] div[data-testid="stVerticalBlockBorderWrapper"],
+div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"],
+div[data-testid="column"] > div,
+div[data-testid="stColumn"] > div,
+div[data-testid="column"],
+div[data-testid="stColumn"] {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    margin-bottom: 0 !important;
 }
 
 /* ── METRICS & ALERTS ── */
@@ -489,6 +515,24 @@ div[data-testid="stErrorMessage"] { background: rgba(239, 68, 68, 0.1) !importan
 [data-testid="stFileUploader"] > section:hover {
   border-color: var(--text-muted) !important;
 }
+/* File uploader layout */
+[data-testid="stFileUploader"] section > div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 16px !important;
+}
+
+/* Space above Browse files button */
+[data-testid="stFileUploader"] button {
+    margin-top: 16px !important;
+}
+
+/* Better spacing for uploader text */
+[data-testid="stFileUploader"] p {
+    margin: 0 !important;
+    line-height: 1.5 !important;
+}
 
 /* ── PROGRESS BAR ── */
 .stProgress > div > div {
@@ -516,7 +560,8 @@ a:hover { color: var(--text-muted) !important; }
 
 /* ── COLUMN GAP ── */
 [data-testid="stColumns"] { gap: 1rem !important; }
-</style>""", unsafe_allow_html=True)
+</style>"""
+    st.markdown(main_css + f"\n<style>\n{responsive_css}\n</style>", unsafe_allow_html=True)
 
 
 def apply_plotly_dark_theme(fig: go.Figure, height: int = 300) -> go.Figure:

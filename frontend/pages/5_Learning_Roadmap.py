@@ -1,17 +1,20 @@
 import streamlit as st
-import plotly.graph_objects as go
-from utils.api_client import api_client
-from utils.styles import inject_custom_css, apply_plotly_dark_theme
+import json
+from utils.styles import inject_custom_css, hero_banner
+from utils.tech_mapping import get_resolution_map, get_autocomplete_suggestions, DEFAULT_SEARCH_URL_TEMPLATE
 
 # Page Configuration
 st.set_page_config(
-    page_title="Learning Roadmap - PlaceMentor AI",
+    page_title="Learning Platform - PlaceMentor AI",
     page_icon="🎯",
     layout="wide",
 )
 
 # Apply Custom Design System
 inject_custom_css()
+
+# Inject meta viewport tag for mobile browser responsiveness
+st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">', unsafe_allow_html=True)
 
 # Auth guard check
 if "access_token" not in st.session_state or not st.session_state.access_token:
@@ -23,341 +26,450 @@ st.markdown(
     """
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-            <span style="font-size:0.75rem; color:#64748B; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;">PORTAL / LEARNING COACH</span>
-            <h2 style="margin:0; font-size:1.6rem; font-weight:800; color:#F8FAFC;" class="neon-text-indigo">Placement Learning Coach</h2>
+            <span style="font-size:0.75rem; color:#64748B; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;">PORTAL / LEARNING HUB</span>
+            <h2 style="margin:0; font-size:1.6rem; font-weight:800; color:#F8FAFC;" class="neon-text-indigo">PlaceMentor Learning Hub</h2>
         </div>
-        <span class="badge badge-indigo">Kanban & AI Quizzes</span>
+        <span class="badge badge-indigo">Direct Redirect System</span>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
+# Hero Banner
+hero_banner(
+    title="Master Core Technical Skills Instantly",
+    subtitle="Search any programming language, framework, database, or development tool. You will be immediately redirected to the best tutorial resources in a new browser tab.",
+    eyebrow="GLOBAL LEARNING PORTAL"
+)
 
-def draw_score_gauge(score: int, title: str):
-    """Draw circular progress indicator for interview/quiz scores.
-    """
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=score,
-        title={'text': title, 'font': {'size': 14, 'color': '#E2E8F0', 'bold': True}},
-        gauge={
-            'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#475569"},
-            'bar': {'color': '#6366F1'},
-            'bgcolor': "rgba(15, 23, 42, 0.6)",
-            'borderwidth': 1,
-            'bordercolor': "rgba(255, 255, 255, 0.08)",
-        }
-    ))
-    apply_plotly_dark_theme(fig, height=150)
-    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10))
-    return fig
+# Centralized technology mapping variables
+resolution_map = get_resolution_map()
+suggestions = get_autocomplete_suggestions()
 
+# Custom component HTML structure with embedded JS logic for lookup, normalization, and redirect
+# Using template placeholders to avoid python f-string escaping conflicts
+html_template = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  
+  body {
+    background-color: transparent;
+    color: #FAFAFA;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+  .search-container {
+    position: relative;
+    width: 100%;
+    max-width: 650px;
+    margin: 10px auto;
+  }
+  .search-input-wrapper {
+    display: flex;
+    align-items: center;
+    background: #09090B;
+    border: 1px solid #27272A;
+    border-radius: 10px;
+    padding: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .search-input-wrapper:focus-within {
+    border-color: #FAFAFA;
+    box-shadow: 0 0 0 2px rgba(250, 250, 250, 0.1), 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  .search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #FAFAFA;
+    font-size: 15px;
+    padding: 12px 16px;
+    width: 100%;
+  }
+  .search-input::placeholder {
+    color: #71717A;
+  }
+  .search-button {
+    background: #FAFAFA;
+    color: #000000;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    white-space: nowrap;
+  }
+  .search-button:hover {
+    background: #E4E4E7;
+  }
+  .suggestions-list {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: #09090B;
+    border: 1px solid #27272A;
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  }
+  .suggestion-item {
+    padding: 12px 18px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #E2E8F0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .suggestion-item:hover, .suggestion-item.active {
+    background: #18181B;
+    color: #FAFAFA;
+  }
+  .suggestion-item .alias-tag {
+    font-size: 11px;
+    color: #71717A;
+    background: #18181B;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid #27272A;
+  }
+  /* Custom scrollbar */
+  .suggestions-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .suggestions-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .suggestions-list::-webkit-scrollbar-thumb {
+    background: #27272A;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<div class="search-container">
+    <div class="search-input-wrapper">
+        <input type="text" id="search-input" class="search-input" placeholder="Search Python, React, Docker, Machine Learning..." autocomplete="off" />
+        <button id="search-btn" class="search-button">Search</button>
+    </div>
+    <div id="suggestions-list" class="suggestions-list"></div>
+</div>
 
-# 1. Fetch study tasks
-tasks = []
-try:
-    res = api_client.get("/roadmap/tasks")
-    if res.status_code == 200:
-        tasks = res.json()
-except Exception as e:
-    st.error(f"Failed to fetch roadmap tasks: {e}")
+<script>
+  // Injected variables replaced by python code
+  const mapping = __MAPPING__;
+  const suggestions = __SUGGESTIONS__;
+  const defaultSearchTemplate = __SEARCH_TEMPLATE__;
 
-# 2. Main layout tabs
-tab_board, tab_quiz, tab_interview = st.tabs([
-    "📋 Kanban Taskboard", "🎓 Practice Quiz Console", "⚔️ Mock Interview Simulator"
-])
+  const searchInput = document.getElementById('search-input');
+  const suggestionsList = document.getElementById('suggestions-list');
+  const searchBtn = document.getElementById('search-btn');
 
-# TAB 1: Taskboard & Timelines
-with tab_board:
-    if not tasks:
-        st.markdown(
-            """
-            <div class="glass-card" style="text-align:center; padding: 40px 20px;">
-                <h3 style="color:#F8FAFC; margin-top:0; font-weight:800;">📋 No Study Tasks Generated Yet</h3>
-                <p style="color:#94A3B8; line-height:1.6; max-width:600px; margin: 10px auto;">
-                    To populate your study board, navigate to the <b>Company Hub</b> page and evaluate your eligibility against any target role (like Google SDE). 
-                    The Placement Coach will automatically detect skill gaps and build study schedules.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        completed_tasks = [t for t in tasks if t["status"] == "Completed"]
-        total_tasks = len(tasks)
-        completion_rate = int((len(completed_tasks) / total_tasks) * 100)
-        
-        st.markdown(f"**Overall Study Board Completion:** {len(completed_tasks)} / {total_tasks} Tasks finished ({completion_rate}%)")
-        st.progress(completion_rate / 100)
-        st.write("")
+  let activeIndex = -1;
+  let currentFiltered = [];
 
-        # Display tasks in Kanban columns
-        col_todo, col_progress, col_done = st.columns(3)
-        
-        with col_todo:
-            st.markdown("<h4 style='color:#FB7185; border-bottom: 2px solid #FB7185; padding-bottom:6px; margin-bottom:16px; font-weight:700;'>Not Started</h4>", unsafe_allow_html=True)
-            todo_tasks = [t for t in tasks if t["status"] == "Not Started"]
-            if not todo_tasks:
-                st.info("No pending tasks in this column.")
-            else:
-                for task in todo_tasks:
-                    with st.container():
-                        st.markdown(
-                            f"""
-                            <div class="glass-card" style="margin-bottom:12px; border-left:3px solid #FB7185;">
-                                <span class="badge badge-ineligible" style="margin-bottom:6px;">{task['skill_name']}</span>
-                                <h5 style="margin:4px 0; color:#F8FAFC; font-weight:700;">{task['title']}</h5>
-                                <div style="font-size:0.8rem; color:#94A3B8; margin-top:6px;">
-                                    Difficulty: <b>{task['difficulty']}</b> | Estimated: <b>{task['estimated_hours']} hrs</b>
-                                </div>
-                                <div style="font-size:0.8rem; color:#94A3B8; margin-top:2px;">
-                                    Priority: <b>{task['priority']} / 5</b>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                        
-                        act_col1, act_col2 = st.columns(2)
-                        with act_col1:
-                            if st.button("Start Task", key=f"start_{task['id']}", use_container_width=True):
-                                api_client.put(f"/roadmap/tasks/{task['id']}/status?status_str=In Progress")
-                                st.rerun()
-                        with act_col2:
-                            if st.button("Finish", key=f"done_fast_{task['id']}", use_container_width=True):
-                                api_client.put(f"/roadmap/tasks/{task['id']}/status?status_str=Completed")
-                                st.rerun()
-
-        with col_progress:
-            st.markdown("<h4 style='color:#FBBF24; border-bottom: 2px solid #FBBF24; padding-bottom:6px; margin-bottom:16px; font-weight:700;'>In Progress</h4>", unsafe_allow_html=True)
-            in_progress_tasks = [t for t in tasks if t["status"] == "In Progress"]
-            if not in_progress_tasks:
-                st.info("No active tasks in progress.")
-            else:
-                for task in in_progress_tasks:
-                    with st.container():
-                        res_link = f"<a href='{task['resource']['url']}' target='_blank' style='color:#818CF8;'>🔗 Open Resource</a>" if task["resource"] else "No URL linked"
-                        st.markdown(
-                            f"""
-                            <div class="glass-card" style="margin-bottom:12px; border-left:3px solid #FBBF24;">
-                                <span class="badge badge-warning" style="margin-bottom:6px;">{task['skill_name']}</span>
-                                <h5 style="margin:4px 0; color:#F8FAFC; font-weight:700;">{task['title']}</h5>
-                                <div style="font-size:0.8rem; color:#94A3B8; margin-top:6px;">
-                                    Progress: <b>{task['progress_percentage']}%</b> | {res_link}
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                        st.progress(task["progress_percentage"] / 100)
-                        
-                        with st.expander("⏱️ Log Study Session"):
-                            with st.form(f"session_form_{task['id']}"):
-                                duration = st.number_input("Duration (minutes)", min_value=1, value=60, step=5)
-                                focus = st.slider("Focus Score (1-5)", 1, 5, 4)
-                                energy = st.slider("Energy Score (1-5)", 1, 5, 4)
-                                notes = st.text_input("Session Notes", placeholder="e.g. Completed section on container mounts")
-                                
-                                log_btn = st.form_submit_button("Save Log")
-                                if log_btn:
-                                    payload = {
-                                        "duration_minutes": duration,
-                                        "focus_score": focus,
-                                        "energy_level": energy,
-                                        "resource_used": task["resource"]["title"] if task["resource"] else "Docs",
-                                        "notes": notes
-                                    }
-                                    res_log = api_client.post(f"/roadmap/tasks/{task['id']}/study-sessions", json=payload)
-                                    if res_log.status_code == 200:
-                                        st.success("✓ Study session logged!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to log session.")
-
-                        if st.button("Mark Completed", key=f"finish_{task['id']}", use_container_width=True):
-                            api_client.put(f"/roadmap/tasks/{task['id']}/status?status_str=Completed")
-                            st.rerun()
-
-        with col_done:
-            st.markdown("<h4 style='color:#34D399; border-bottom: 2px solid #34D399; padding-bottom:6px; margin-bottom:16px; font-weight:700;'>Completed</h4>", unsafe_allow_html=True)
-            done_tasks = [t for t in tasks if t["status"] == "Completed"]
-            if not done_tasks:
-                st.info("No completed tasks yet.")
-            else:
-                for task in done_tasks:
-                    with st.container():
-                        st.markdown(
-                            f"""
-                            <div class="glass-card" style="margin-bottom:12px; border-left:3px solid #34D399; background: rgba(16, 185, 129, 0.03);">
-                                <span class="badge badge-eligible" style="margin-bottom:6px;">{task['skill_name']}</span>
-                                <h5 style="margin:4px 0; color:#94A3B8; text-decoration: line-through;">{task['title']}</h5>
-                                <div style="font-size:0.8rem; color:#34D399; margin-top:6px; font-weight:700;">
-                                    ✓ Mastered (+30% Confidence Boost)
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                        
-                        if st.button("Reset Task", key=f"reset_{task['id']}", use_container_width=True):
-                            api_client.put(f"/roadmap/tasks/{task['id']}/status?status_str=Not Started")
-                            st.rerun()
-
-
-# TAB 2: MCQ Quiz Console
-with tab_quiz:
-    st.subheader("🎓 Practice Topic Quizzes")
-    st.write("Evaluate your concept knowledge using topic-matched MCQs from the practice question bank.")
-
-    roadmap_skills = list(set([t["skill_name"] for t in tasks]))
-    if not roadmap_skills:
-        roadmap_skills = ["Docker", "FastAPI", "Python"]
-
-    selected_quiz_skill = st.selectbox("Select Quiz Topic", roadmap_skills)
-    
-    if "current_quiz_skill" not in st.session_state or st.session_state.current_quiz_skill != selected_quiz_skill:
-        st.session_state.current_quiz_skill = selected_quiz_skill
-        st.session_state.quiz_questions = []
-        st.session_state.quiz_answers = {}
-        st.session_state.quiz_evaluated = False
-
-    if st.button("Fetch Quiz Questions", key="load_quiz_btn"):
-        with st.spinner("Fetching question bank..."):
-            quiz_res = api_client.get(f"/roadmap/quizzes/{selected_quiz_skill}")
-            if quiz_res.status_code == 200:
-                st.session_state.quiz_questions = quiz_res.json()
-                st.session_state.quiz_answers = {}
-                st.session_state.quiz_evaluated = False
-            else:
-                st.error("Failed to load questions.")
-
-    if st.session_state.quiz_questions:
-        st.write("---")
-        with st.form("quiz_form"):
-            for idx, q in enumerate(st.session_state.quiz_questions):
-                st.write(f"**Q{idx+1}. {q['question_text']}**")
-                user_ans = st.radio(
-                    f"Select answer for Q{idx+1}:", 
-                    q["options"], 
-                    key=f"q_radio_{q['id']}"
-                )
-                st.session_state.quiz_answers[q["id"]] = user_ans
-                st.write("")
-
-            quiz_submit = st.form_submit_button("Submit Quiz Answers")
-            if quiz_submit:
-                st.session_state.quiz_evaluated = True
-
-        if st.session_state.quiz_evaluated:
-            correct_count = 0
-            st.write("### Quiz Scorecard")
-            for idx, q in enumerate(st.session_state.quiz_questions):
-                ans = st.session_state.quiz_answers.get(q["id"])
-                is_correct = (ans == q["correct_option"])
-                if is_correct:
-                    correct_count += 1
-                    st.markdown(f"<span style='color:#34D399;'><b>✓ Q{idx+1} Correct!</b></span>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<span style='color:#FB7185;'><b>✖ Q{idx+1} Incorrect.</b> Selected: '{ans}' | Correct: '{q['correct_option']}'</span>", unsafe_allow_html=True)
-                
-                st.markdown(
-                    f"""
-                    <div class="glass-card" style="padding: 10px 16px; margin-top:5px; margin-bottom:15px; font-size:0.85rem;">
-                        <b>Explanation:</b> {q['explanation']}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            score_percent = int((correct_count / len(st.session_state.quiz_questions)) * 100)
-            st.plotly_chart(draw_score_gauge(score_percent, "QUIZ SCORE"), use_container_width=True)
-            if score_percent >= 80:
-                st.success("Great job! You demonstrate high mastery of this topic.")
-            else:
-                st.warning("Review the suggested roadmap tutorials to build your skill confidence.")
-
-
-# TAB 3: Mock Interview Simulator
-with tab_interview:
-    st.subheader("⚔️ Technical Interview Simulator")
-    st.write("Compose written answers to typical campus placement questions and receive breakdown ratings and feedback reports.")
-
-    interview_prompts = {
-        "Docker": {
-            "id": "d0c00000-0000-0000-0000-000000000001",
-            "prompt": "Explain what a Dockerfile is and how layer caching speeds up application deployment container builds."
-        },
-        "FastAPI": {
-            "id": "fa0a0000-0000-0000-0000-000000000001",
-            "prompt": "Explain the differences between synchronous (def) and asynchronous (async def) endpoint routing in FastAPI."
-        },
-        "Python": {
-            "id": "ca000000-0000-0000-0000-000000000001",
-            "prompt": "Explain how memory management works in Python, focusing on reference counting and garbage collection."
-        }
+  function showSuggestions(val) {
+    suggestionsList.innerHTML = '';
+    if (!val || val.trim() === '') {
+      suggestionsList.style.display = 'none';
+      return;
     }
+    
+    const query = val.toLowerCase().trim();
+    
+    // Filter display names containing the query
+    const matchSet = new Set();
+    suggestions.forEach(item => {
+      if (item.toLowerCase().includes(query)) {
+        matchSet.add(item);
+      }
+    });
+    
+    // Check aliases and match primary display name
+    for (const [key, value] of Object.entries(mapping)) {
+      if (key.includes(query)) {
+        // Find Display Name matching this URL in suggestions
+        suggestions.forEach(sug => {
+          if (mapping[sug.toLowerCase()] === value) {
+            matchSet.add(sug);
+          }
+        });
+      }
+    }
+    
+    currentFiltered = Array.from(matchSet);
 
-    selected_interview_topic = st.selectbox("Select Interview Topic Domain", list(interview_prompts.keys()))
-    prompt_details = interview_prompts[selected_interview_topic]
+    if (currentFiltered.length === 0) {
+      const div = document.createElement('div');
+      div.className = 'suggestion-item';
+      div.innerHTML = `<span>Search GeeksforGeeks for "<b>${escapeHtml(val)}</b>"</span><span class="alias-tag">Search</span>`;
+      div.addEventListener('click', () => {
+        performSearch(val);
+      });
+      suggestionsList.appendChild(div);
+    } else {
+      currentFiltered.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.innerHTML = `<span>${item}</span><span class="alias-tag">Tutorial</span>`;
+        div.addEventListener('click', () => {
+          performSearch(item);
+        });
+        suggestionsList.appendChild(div);
+      });
+    }
+    
+    suggestionsList.style.display = 'block';
+    activeIndex = -1;
+  }
 
-    st.markdown(
-        f"""
-        <div class="glass-card" style="border-left: 4px solid #6366F1; background: rgba(99,102,241,0.02); margin-bottom: 20px;">
-            <span class="badge badge-indigo" style="margin-bottom:6px;">INTERVIEW QUESTION</span>
-            <h4 style="margin:4px 0 0 0; color:#F8FAFC; font-weight:600;">{prompt_details['prompt']}</h4>
+  function performSearch(query) {
+    if (!query || query.trim() === '') return;
+    
+    // Normalize user input (trim spaces, ignore case, resolve aliases)
+    const normalized = query.toLowerCase().trim();
+    let targetUrl = mapping[normalized];
+    
+    if (!targetUrl) {
+      // Fallback search URL
+      targetUrl = defaultSearchTemplate.replace('{query}', encodeURIComponent(query));
+    }
+    
+    window.open(targetUrl, '_blank');
+    searchInput.value = '';
+    suggestionsList.style.display = 'none';
+  }
+
+  // Event Listeners
+  searchInput.addEventListener('input', (e) => {
+    showSuggestions(e.target.value);
+  });
+
+  searchInput.addEventListener('focus', (e) => {
+    showSuggestions(e.target.value);
+  });
+
+  searchInput.addEventListener('keydown', (e) => {
+    const items = suggestionsList.getElementsByClassName('suggestion-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = (activeIndex + 1) % items.length;
+      updateActive(items);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = (activeIndex - 1 + items.length) % items.length;
+      updateActive(items);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndex > -1 && items[activeIndex]) {
+        items[activeIndex].click();
+      } else {
+        performSearch(searchInput.value);
+      }
+    } else if (e.key === 'Escape') {
+      suggestionsList.style.display = 'none';
+    }
+  });
+
+  function updateActive(items) {
+    for (let i = 0; i < items.length; i++) {
+      items[i].classList.remove('active');
+    }
+    if (activeIndex > -1 && items[activeIndex]) {
+      items[activeIndex].classList.add('active');
+      items[activeIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target !== searchInput && !suggestionsList.contains(e.target)) {
+      suggestionsList.style.display = 'none';
+    }
+  });
+
+  searchBtn.addEventListener('click', () => {
+    performSearch(searchInput.value);
+  });
+
+  function escapeHtml(text) {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+  }
+</script>
+</body>
+</html>
+"""
+
+# Replace placeholders with JSON representation
+search_component_html = html_template.replace(
+    "__MAPPING__", json.dumps(resolution_map)
+).replace(
+    "__SUGGESTIONS__", json.dumps(suggestions)
+).replace(
+    "__SEARCH_TEMPLATE__", json.dumps(DEFAULT_SEARCH_URL_TEMPLATE)
+)
+
+# Render custom HTML component with standard height to prevent dropdown clipping
+st.components.v1.html(search_component_html, height=270)
+
+# Popular Technologies Section
+st.write("")
+st.markdown("### 🌟 Popular Technologies & Tutorials")
+st.markdown("Click on any of the cards below to immediately open the tutorial in a new tab.")
+
+# Custom CSS for modern interactive hover cards
+st.markdown(
+    """
+    <style>
+    .popular-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 16px;
+        margin-top: 10px;
+    }
+    .popular-card {
+        background: #09090B !important;
+        border: 1px solid #27272A !important;
+        border-radius: 12px !important;
+        padding: 22px 18px !important;
+        text-align: left !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        cursor: pointer !important;
+        text-decoration: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        min-height: 140px !important;
+    }
+    .popular-card:hover {
+        border-color: #FAFAFA !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 30px rgba(255, 255, 255, 0.04) !important;
+    }
+    .popular-card-icon {
+        font-size: 1.8rem !important;
+        margin-bottom: 12px !important;
+    }
+    .popular-card-title {
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
+        color: #FAFAFA !important;
+        margin: 0 0 6px 0 !important;
+    }
+    .popular-card-desc {
+        font-size: 0.82rem !important;
+        color: #A1A1AA !important;
+        line-height: 1.4 !important;
+        margin: 0 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Grid definitions
+popular_techs = [
+    {
+        "name": "Python",
+        "icon": "🐍",
+        "desc": "Core language concepts, basic syntax, and programming structures.",
+        "url": resolution_map["python"]
+    },
+    {
+        "name": "Java",
+        "icon": "☕",
+        "desc": "Object-oriented paradigm, concurrency, collections framework.",
+        "url": resolution_map["java"]
+    },
+    {
+        "name": "C++",
+        "icon": "💻",
+        "desc": "High performance programming, STL, memory allocation concepts.",
+        "url": resolution_map["c++"]
+    },
+    {
+        "name": "JavaScript",
+        "icon": "⚡",
+        "desc": "Web page interactivity, DOM manipulation, asynchronous patterns.",
+        "url": resolution_map["javascript"]
+    },
+    {
+        "name": "React",
+        "icon": "⚛️",
+        "desc": "Declarative component UI, state orchestration, React Hooks.",
+        "url": resolution_map["react"]
+    },
+    {
+        "name": "FastAPI",
+        "icon": "🚀",
+        "desc": "High performance APIs build out, Pydantic type models.",
+        "url": resolution_map["fastapi"]
+    },
+    {
+        "name": "Docker",
+        "icon": "🐳",
+        "desc": "Container deployments orchestration, multi-stage builds caching.",
+        "url": resolution_map["docker"]
+    },
+    {
+        "name": "PostgreSQL",
+        "icon": "🐘",
+        "desc": "Robust relational queries, triggers execution, index layout design.",
+        "url": resolution_map["postgresql"]
+    },
+    {
+        "name": "Machine Learning",
+        "icon": "🤖",
+        "desc": "Scikit-Learn regression, data fitting models, evaluation indexes.",
+        "url": resolution_map["machine learning"]
+    },
+    {
+        "name": "Data Structures & Algorithms",
+        "icon": "📊",
+        "desc": "Linked lists, search execution trees, graph processing structures.",
+        "url": resolution_map.get("data structures & algorithms", "https://www.geeksforgeeks.org/data-structures/")
+    },
+    {
+        "name": "System Design",
+        "icon": "🏗️",
+        "desc": "Caching architectures design, load balancers scaling configurations.",
+        "url": resolution_map.get("system design", "https://www.geeksforgeeks.org/system-design-tutorial/")
+    }
+]
+
+# Generate and render HTML grid for popular technologies
+grid_html = '<div class="popular-grid">'
+for tech in popular_techs:
+    grid_html += f"""
+    <a href="{tech['url']}" target="_blank" class="popular-card">
+        <div>
+            <div class="popular-card-icon">{tech['icon']}</div>
+            <h4 class="popular-card-title">{tech['name']}</h4>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        <p class="popular-card-desc">{tech['desc']}</p>
+    </a>
+    """
+grid_html += '</div>'
 
-    with st.form("interview_form"):
-        student_answer = st.text_area("Your Response *", height=150, placeholder="Write a detailed explanation (at least 15-20 words)...")
-        submit_answer = st.form_submit_button("Submit Response for Evaluation")
-        
-        if submit_answer:
-            if len(student_answer.strip()) < 10:
-                st.error("Please compose a more complete answer before requesting evaluation.")
-            else:
-                with st.spinner("Analyzing response syntax, keywords compliance, and clarity..."):
-                    payload = {"student_answer": student_answer}
-                    res_ans = api_client.post(f"/roadmap/interviews/{prompt_details['id']}/answer", json=payload)
-                    if res_ans.status_code == 200:
-                        report = res_ans.json()
-                        
-                        st.markdown("### 📊 Performance Scorecard")
-                        
-                        col_g, col_details = st.columns([1, 1.8])
-                        with col_g:
-                            st.plotly_chart(draw_score_gauge(report["overall_score"], "OVERALL RATING"), use_container_width=True)
-                            
-                        with col_details:
-                            st.markdown(
-                                f"""
-                                <b>Technical Accuracy:</b> {report['technical_score']}%<br>
-                                <b>Communication Clarity:</b> {report['communication_score']}%<br>
-                                <b>Answer Completeness:</b> {report['completeness_score']}%<br>
-                                <b>Grammatical Correctness:</b> {report['grammar_score']}%<br>
-                                """,
-                                unsafe_allow_html=True,
-                            )
-
-                        st.markdown("#### Coaching Feedback")
-                        st.info(report["ai_feedback"])
-                        
-                        col_weak, col_links = st.columns(2)
-                        with col_weak:
-                            st.write("**Weak Areas Identified:**")
-                            st.error(report["weak_areas"])
-                        with col_links:
-                            st.write("**Suggested Study Readings:**")
-                            if report["suggested_reading"]:
-                                st.markdown(f"[🔗 Study Link Guide]({report['suggested_reading']})")
-                            else:
-                                st.write("Review official core docs.")
-                                
-                        if report["overall_score"] >= 75:
-                            st.success("✓ Passed! This response satisfies candidate standards. +10% Skill Confidence added.")
-                        else:
-                            st.warning("Needs Improvement. Try revising your draft using the suggested study links.")
-                    else:
-                        st.error("Failed to compile answer evaluation.")
+st.markdown(grid_html, unsafe_allow_html=True)

@@ -9,8 +9,9 @@ class ScoreBreakdown(BaseModel):
     grammar_score: int = Field(0, ge=0, le=20)
     keyword_score: int = Field(0, ge=0, le=20)
     project_score: int = Field(0, ge=0, le=20)
-    experience_score: int = Field(0, ge=0, le=10)
-    achievements_score: int = Field(0, ge=0, le=10)
+    experience_score: int = Field(0, ge=0, le=20)
+    achievements_score: int = Field(0, ge=0, le=20)
+    contact_score: int = Field(0, ge=0, le=10)
 
 
 class StrengthMeter(BaseModel):
@@ -67,6 +68,10 @@ class ResumeAnalysisResponse(BaseModel):
     missing_skills: List[str] = Field(default_factory=list)
     missing_keywords: List[str] = Field(default_factory=list)
     role_match: Optional[RoleMatch] = Field(None, validation_alias="role_match")
+    recruiter_report: Dict = Field(default_factory=dict)
+    semantic_analysis: Dict = Field(default_factory=dict)
+    interview_preparation: Dict = Field(default_factory=dict)
+    analytics_data: Dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

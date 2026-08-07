@@ -116,6 +116,7 @@ class CompanyBase(BaseModel):
     hiring_frequency: str = "Yearly"
     internship_ppo_available: bool = True
     remote_onsite: str = "Onsite"
+    data_source: str = "Admin Upload"
 
 
 class CompanyCreate(CompanyBase):

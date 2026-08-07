@@ -79,6 +79,18 @@ class ResumeAnalysis(Base):
         JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
     )
     parsed_text: Mapped[str] = mapped_column(Text, nullable=True)
+    recruiter_report: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
+    semantic_analysis: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
+    interview_preparation: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
+    analytics_data: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False

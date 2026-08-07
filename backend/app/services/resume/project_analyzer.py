@@ -1,15 +1,13 @@
 import re
 from typing import Dict, List, Tuple
 
-# Lists of strong action verbs typically used in resumes
 ACTION_VERBS = [
-    "developed", "designed", "implemented", "optimized", "created", "built",
+    "developed", "designed", "implemented", "optimized", "optimised", "created", "built",
     "launched", "managed", "engineered", "integrated", "deployed", "reduced",
     "improved", "enhanced", "accelerated", "scaled", "orchestrated", "refactored",
     "authored", "automated", "executed", "formulated", "pioneered", "restructured"
 ]
 
-# Simple mapping of common weak phrases to strong action-oriented, metrics-driven recommendations
 SUGGESTION_MAPPING = [
     (
         r"(worked on|developed|built)\s+(an?|my)?\s*(e-?commerce|online shop|shopping)\s*(website|app|platform)?",
@@ -34,15 +32,26 @@ SUGGESTION_MAPPING = [
 ]
 
 
+def _is_likely_title(line: str) -> bool:
+    """Heuristic to detect if a line is a project title rather than a bullet."""
+    stripped = line.lstrip("- *•▸►▶▷#>")
+    if len(stripped) > 60:
+        return False
+    lower = stripped.lower()
+    starts_with_verb = any(lower.startswith(v) for v in ACTION_VERBS)
+    has_metric = bool(re.search(r"\b\d+\b", stripped))
+    if starts_with_verb and has_metric:
+        return False
+    if stripped.isupper():
+        return True
+    words = stripped.split()
+    if len(words) <= 4 and not starts_with_verb:
+        return True
+    return False
+
+
 def analyze_projects(projects_text: str) -> Tuple[int, List[Dict[str, str]], List[Dict[str, str]]]:
-    """Analyze the projects section text and output project scores and AI suggestions.
-
-    Args:
-        projects_text: Text block of the projects section.
-
-    Returns:
-        Tuple: (project_score, detailed_project_analyses, suggestion_list)
-    """
+    """Analyze the projects section text and output project scores and AI suggestions."""
     project_score = 0
     detailed_analyses = []
     suggestions = []
@@ -58,29 +67,23 @@ def analyze_projects(projects_text: str) -> Tuple[int, List[Dict[str, str]], Lis
             }
         ]
 
-    # Split into lines
     lines = [l.strip() for l in projects_text.split("\n") if l.strip()]
-    
-    # Identify project blocks (typically a header line followed by bullet points)
-    # A simple parser groups text by line content
+
     current_project = "General Projects"
     project_bullets = {current_project: []}
 
     for line in lines:
-        # If line looks like a title (short, no bullet indicator, no verbs)
         is_bullet = line.startswith(("-", "*", "•", "o", "1.", "2.", "3.", "4."))
         clean_line = re.sub(r"^[\-\*\•od\.]+\s*", "", line).strip()
-        
-        if not is_bullet and len(clean_line) < 40 and not any(v in clean_line.lower() for v in ACTION_VERBS[:5]):
-            current_project = clean_name = clean_line
+
+        if not is_bullet and _is_likely_title(clean_line):
+            current_project = clean_line
             project_bullets[current_project] = []
         else:
             project_bullets[current_project].append(clean_line)
 
-    # Clean empty groups
     project_bullets = {k: v for k, v in project_bullets.items() if v}
     if not project_bullets:
-        # Fallback to lines if no structured projects found
         project_bullets = {"Project 1": lines}
 
     total_bullets = 0
@@ -88,28 +91,26 @@ def analyze_projects(projects_text: str) -> Tuple[int, List[Dict[str, str]], Lis
     bullets_with_verbs = 0
 
     for proj_title, bullets in project_bullets.items():
-        proj_score = 50  # Base score for project definition
+        proj_score = 30
         proj_suggestions = []
 
         for bullet in bullets:
             total_bullets += 1
             bullet_lower = bullet.lower()
 
-            # 1. Check for metrics (numbers, %, metrics keywords)
             has_metric = bool(re.search(r"\b\d+(\.\d+)?%?\b", bullet)) or any(
-                m in bullet_lower for m in ["percent", "percentage", "lpa", "hours", "ms", "latency", "accuracy", "speedup", "seconds"]
+                m in bullet_lower for m in ["percent", "percentage", "lpa", "hours", "ms", "latency", "accuracy", "speedup", "seconds", "throughput", "reduced", "improved", "increased"]
             )
             if has_metric:
                 bullets_with_metrics += 1
                 proj_score += 15
 
-            # 2. Check for action verbs
             has_verb = any(bullet_lower.startswith(v) or re.match(r"^\w+\s+" + v, bullet_lower) for v in ACTION_VERBS)
             if has_verb:
                 bullets_with_verbs += 1
                 proj_score += 10
 
-            # 3. Check for specific weak phrases to generate suggestions
+            matched_specific = False
             for regex, replacement in SUGGESTION_MAPPING:
                 if re.search(regex, bullet_lower):
                     suggestions.append(
@@ -122,8 +123,27 @@ def analyze_projects(projects_text: str) -> Tuple[int, List[Dict[str, str]], Lis
                         }
                     )
                     proj_suggestions.append(f"Upgrade bullet point: '{bullet}' to reflect action and metrics.")
+                    matched_specific = True
+                    break
 
-        # Cap project-specific score at 100
+            if not matched_specific and (not has_verb or not has_metric):
+                missing_parts = []
+                if not has_verb:
+                    missing_parts.append("strong action verbs")
+                if not has_metric:
+                    missing_parts.append("measurable metrics/results")
+                
+                suggestions.append(
+                    {
+                        "category": "project",
+                        "target": proj_title,
+                        "current": bullet,
+                        "suggested": "Structure this bullet to start with a strong action verb (e.g. 'Optimized', 'Designed') and quantify the impact with a number or percentage.",
+                        "rationale": f"Bullet point lacks {' and '.join(missing_parts)}."
+                    }
+                )
+                proj_suggestions.append(f"Upgrade bullet point: '{bullet}' to reflect action and metrics.")
+
         proj_score = min(proj_score, 100)
         detailed_analyses.append(
             {
@@ -133,8 +153,6 @@ def analyze_projects(projects_text: str) -> Tuple[int, List[Dict[str, str]], Lis
             }
         )
 
-    # Calculate overall project section score (out of 20 points for ATS)
-    # Average of project scores scaled to 20
     if detailed_analyses:
         avg_score = sum(p["score"] for p in detailed_analyses) / len(detailed_analyses)
         project_score = int((avg_score / 100) * 20)

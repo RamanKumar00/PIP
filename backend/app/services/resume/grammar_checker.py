@@ -1,4 +1,6 @@
+import os
 import re
+import threading
 from typing import Dict, List, Tuple
 
 # Common spelling mistakes list as fallback
@@ -17,6 +19,28 @@ COMMON_MISSPELLINGS = {
     "succesful": "successful",
 }
 
+# Thread-safe singleton for LanguageTool
+_lt_tool = None
+_lt_lock = threading.Lock()
+
+
+def _get_grammar_tool():
+    """Lazy-initialize LanguageTool once per process."""
+    global _lt_tool
+    if _lt_tool is None:
+        with _lt_lock:
+            if _lt_tool is None:
+                # Allow disabling local JRE server in restricted environments (serverless, locked containers)
+                if os.getenv("USE_LOCAL_LANGUAGETOOL", "true").lower() == "false":
+                    _lt_tool = False
+                    return _lt_tool
+                try:
+                    import language_tool_python
+                    _lt_tool = language_tool_python.LanguageTool("en-US")
+                except Exception:
+                    _lt_tool = False
+    return _lt_tool
+
 
 def check_grammar_and_spelling(text: str) -> Tuple[int, List[Dict[str, str]]]:
     """Verify spelling and grammar errors in resume text.
@@ -33,25 +57,24 @@ def check_grammar_and_spelling(text: str) -> Tuple[int, List[Dict[str, str]]]:
     if not text:
         return 0, []
 
-    # Attempt to use language-tool-python
-    try:
-        import language_tool_python
-        # Using a context manager or local client. Note: download happens on first init.
-        # To avoid blocking, we limit download time or wrap in try
-        tool = language_tool_python.LanguageTool("en-US")
-        matches = tool.check(text)
-        tool.close()
+    tool = _get_grammar_tool()
 
-        for match in matches:
-            issues.append(
-                {
-                    "issue_type": "grammar_or_spelling",
-                    "description": match.message,
-                    "current": text[match.offset : match.offset + match.errorLength],
-                    "suggested": ", ".join(match.replacements[:3]) if match.replacements else "N/A",
-                }
-            )
-    except Exception:
+    if tool and tool is not False:
+        try:
+            matches = tool.check(text)
+            for match in matches:
+                issues.append(
+                    {
+                        "issue_type": "grammar_or_spelling",
+                        "description": match.message,
+                        "current": text[match.offset : match.offset + match.errorLength],
+                        "suggested": ", ".join(match.replacements[:3]) if match.replacements else "N/A",
+                    }
+                )
+        except Exception:
+            tool = False
+
+    if not tool or tool is False:
         # Graceful fallback: Rule-based custom checks
         # 1. Check duplicate words (e.g., "the the")
         dup_pattern = re.compile(r"\b(\w+)\s+\1\b", re.IGNORECASE)

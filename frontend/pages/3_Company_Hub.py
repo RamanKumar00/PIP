@@ -13,6 +13,9 @@ st.set_page_config(
 # Apply Custom Design System
 inject_custom_css()
 
+# Inject meta viewport tag for mobile browser responsiveness
+st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">', unsafe_allow_html=True)
+
 # Auth guard check
 if "access_token" not in st.session_state or not st.session_state.access_token:
     st.warning("Please log in first from the Command Center Home Page.")
@@ -40,7 +43,7 @@ def draw_eligibility_gauge(score: int, title: str, is_eligible: bool):
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=score,
-        title={'text': title, 'font': {'size': 14, 'color': '#E2E8F0', 'bold': True}},
+        title={'text': title, 'font': {'size': 14, 'color': '#E2E8F0', 'weight': 'bold'}},
         gauge={
             'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#475569"},
             'bar': {'color': color},
@@ -87,7 +90,7 @@ if not profile_ok or not resume_ok:
     st.write("")
 
 # 2. Search & Filter Bar
-search_term = st.text_input("🔍 Search Recruiter Directory by Company Name or Industry:", placeholder="e.g. Google, Amazon, Technology...")
+search_term = st.text_input("🔍 Search Recruiter Directory by Company Name or Industry:", placeholder="e.g. Google, Amazon, Technology...", key="company_search")
 
 # 3. Fetch Companies list
 try:
@@ -168,8 +171,9 @@ try:
                                                         report["overall_score"], 
                                                         "COMPATIBILITY FIT", 
                                                         report["is_eligible"]
-                                                    ), 
-                                                    use_container_width=True
+                                                     ), 
+                                                     use_container_width=True,
+                                                     config={'responsive': True}
                                                 )
                                                 
                                             with col_report:
