@@ -31,7 +31,8 @@ def _get_grammar_tool():
         with _lt_lock:
             if _lt_tool is None:
                 # Allow disabling local JRE server in restricted environments (serverless, locked containers)
-                if os.getenv("USE_LOCAL_LANGUAGETOOL", "true").lower() == "false":
+                # Default to false to avoid JVM startup hangs and high RAM usage in resource-constrained environments
+                if os.getenv("USE_LOCAL_LANGUAGETOOL", "false").lower() == "false":
                     _lt_tool = False
                     return _lt_tool
                 try:
