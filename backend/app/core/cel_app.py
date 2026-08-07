@@ -14,8 +14,8 @@ except Exception:
 # Initialize Celery app instance
 celery_app = Celery(
     "placementor_worker",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
+    broker=settings.REDIS_URL,
+    backend=settings.REDIS_URL,
 )
 
 # Configure Celery configurations
