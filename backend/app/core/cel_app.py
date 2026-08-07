@@ -3,10 +3,27 @@ import redis
 from celery import Celery
 from app.core.config import settings
 
+def format_redis_url(url: str) -> str:
+    if not url.startswith("rediss://"):
+        return url
+    from urllib.parse import urlparse, urlunparse
+    parsed = urlparse(url)
+    # Ensure database index /0 is specified
+    if not parsed.path or parsed.path == "/":
+        parsed = parsed._replace(path="/0")
+    rebuilt = urlunparse(parsed)
+    # Ensure ssl_cert_reqs is present
+    if "ssl_cert_reqs" not in rebuilt:
+        separator = "&" if "?" in rebuilt else "?"
+        rebuilt = f"{rebuilt}{separator}ssl_cert_reqs=none"
+    return rebuilt
+
+redis_url = format_redis_url(settings.REDIS_URL)
+
 # Check if Redis is running locally, otherwise fall back to synchronous eager mode
 always_eager = False
 try:
-    r = redis.Redis.from_url(settings.REDIS_URL, socket_timeout=1.0)
+    r = redis.Redis.from_url(redis_url, socket_timeout=1.0)
     r.ping()
 except Exception:
     always_eager = True
@@ -14,8 +31,8 @@ except Exception:
 # Initialize Celery app instance
 celery_app = Celery(
     "placementor_worker",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=redis_url,
+    backend=redis_url,
 )
 
 # Configure Celery configurations
