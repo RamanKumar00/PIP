@@ -25,7 +25,8 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000/api/v1")
 
 class APIClient:
     def __init__(self):
-        self.base_url = BACKEND_URL
+        # Force base_url to end with a trailing slash to preserve /api/v1 prefix during merges
+        self.base_url = BACKEND_URL if BACKEND_URL.endswith("/") else f"{BACKEND_URL}/"
         self.timeout_default = httpx.Timeout(5.0, connect=3.0)
         self.timeout_upload = httpx.Timeout(120.0, connect=5.0)
         self.client = httpx.Client(
@@ -53,8 +54,9 @@ class APIClient:
 
         try:
             # We bypass the standard _get_headers and call directly to avoid recursion
+            # Strip leading slash to preserve /api/v1 path prefix in base_url
             response = self.client.post(
-                "/auth/refresh",
+                "auth/refresh",
                 params={"refresh_token": st.session_state.refresh_token},
                 timeout=self.timeout_default,
             )
@@ -95,10 +97,13 @@ class APIClient:
             timeout = self.timeout_default
 
         json_body = json if json is not None else data
+        
+        # Strip leading slash to preserve /api/v1 path prefix in base_url
+        clean_path = path.lstrip("/")
 
         try:
             response = self.client.request(
-                method, path, headers=headers, params=params, json=json_body, files=files, timeout=timeout
+                method, clean_path, headers=headers, params=params, json=json_body, files=files, timeout=timeout
             )
         except Exception as e:
             # Reraise as a custom exception or response
@@ -113,11 +118,11 @@ class APIClient:
                 if files:
                     headers.pop("Content-Type", None)
                     return self.client.request(
-                        method, path, headers=headers, params=params, files=files, timeout=self.timeout_upload
+                        method, clean_path, headers=headers, params=params, files=files, timeout=self.timeout_upload
                     )
                 else:
                     return self.client.request(
-                        method, path, headers=headers, params=params, json=json_body, timeout=self.timeout_default
+                        method, clean_path, headers=headers, params=params, json=json_body, timeout=self.timeout_default
                     )
             else:
                 # Trigger a streamlit rerun to kick user back to login
