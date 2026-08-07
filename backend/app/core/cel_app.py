@@ -20,14 +20,6 @@ def format_redis_url(url: str) -> str:
 
 redis_url = format_redis_url(settings.REDIS_URL)
 
-# Check if Redis is running locally, otherwise fall back to synchronous eager mode
-always_eager = False
-try:
-    r = redis.Redis.from_url(redis_url, socket_timeout=1.0)
-    r.ping()
-except Exception:
-    always_eager = True
-
 # Initialize Celery app instance
 celery_app = Celery(
     "placementor_worker",
@@ -42,6 +34,6 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    task_always_eager=always_eager,
+    task_always_eager=False,
     imports=["app.worker.tasks"],  # Autoload task definitions
 )
